@@ -1,0 +1,35 @@
+{
+  "name": "wdm-admin",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "description": "副食批发平台 - 管理端 (Vue 3 + Vite + TS + Naive UI)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:check": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "type-check": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@vicons/tabler": "^0.13.0",
+    "axios": "^1.7.7",
+    "dayjs": "^1.11.13",
+    "echarts": "^5.5.1",
+    "naive-ui": "^2.42.0",
+    "pinia": "^2.2.4",
+    "vue": "^3.5.10",
+    "vue-echarts": "^7.0.3",
+    "vue-router": "^4.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.5",
+    "@vitejs/plugin-vue": "^5.1.4",
+    "sass": "^1.79.4",
+    "typescript": "~5.6.2",
+    "unplugin-auto-import": "^0.18.3",
+    "unplugin-vue-components": "^0.27.4",
+    "vite": "^5.4.8",
+    "vue-tsc": "^2.1.6"
+  }
+}

@@ -1,0 +1,25 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.log
+npm-debug.log*
+auto-imports.d.ts
+components.d.ts
+
+# IDE
+.qoder/
+.idea/
+.vscode/
+
+# Screenshots
+*.png
+screenshot_*
+
+# Utility scripts
+gen_icons.py
