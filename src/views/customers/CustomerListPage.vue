@@ -6,94 +6,307 @@
         <n-button type="primary" @click="openCreate">新增客户</n-button>
       </div>
       <div class="filter-bar">
-        <n-input v-model:value="query.keyword" placeholder="姓名 / 手机 / 店铺" clearable style="width: 240px" @keyup.enter="reload" />
-        <n-select v-model:value="query.status" placeholder="状态" clearable style="width: 120px" :options="[{label:'待审核',value:'pending'},{label:'正常',value:'active'},{label:'已禁用',value:'disabled'}]" @update:value="reload" />
-        <n-select v-model:value="query.level" placeholder="等级" clearable style="width: 120px" :options="[{label:'青铜',value:'bronze'},{label:'白银',value:'silver'},{label:'黄金',value:'gold'},{label:'VIP',value:'vip'}]" @update:value="reload" />
-        <n-select v-model:value="query.sales_id" placeholder="归属销售" clearable filterable style="width: 160px" :options="salesOpts" @update:value="reload" />
+        <n-input v-model:value="keyword" placeholder="客户名称 / 手机号" clearable style="width: 240px" @keyup.enter="reload" />
+        <n-select v-model:value="status" placeholder="状态" clearable style="width: 140px" :options="statusOpts" @update:value="reload" />
         <n-button type="primary" size="small" @click="reload">查询</n-button>
       </div>
       <n-data-table :columns="columns" :data="list" :loading="loading" :bordered="false" size="small" :row-key="(r:any)=>r.id" />
-      <div class="pagination-bar"><n-pagination v-model:page="query.page" :page-size="query.page_size" :item-count="total" @update:page="reload" /></div>
     </div>
-    <n-modal v-model:show="editVisible" :title="form.id ? '编辑客户' : '新增客户'" preset="card" style="width: 600px">
-      <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="100">
-        <n-form-item label="客户姓名" path="name"><n-input v-model:value="form.name" /></n-form-item>
-        <n-form-item label="店铺名"><n-input v-model:value="form.shop_name" /></n-form-item>
-        <n-form-item label="手机号" path="phone"><n-input v-model:value="form.phone" maxlength="11" /></n-form-item>
-        <n-form-item label="地址"><n-input v-model:value="form.address" /></n-form-item>
-        <n-form-item label="等级" path="level"><n-select v-model:value="form.level" :options="[{label:'青铜',value:'bronze'},{label:'白银',value:'silver'},{label:'黄金',value:'gold'},{label:'VIP',value:'vip'}]" /></n-form-item>
-        <n-form-item label="归属销售"><n-select v-model:value="form.sales_id" filterable :options="salesOpts" /></n-form-item>
-        <n-form-item label="账期额度"><n-input-number v-model:value="form.credit_limit" :min="0" :step="1000" /></n-form-item>
-        <n-form-item label="备注"><n-input v-model:value="form.remark" type="textarea" :rows="2" /></n-form-item>
+
+    <n-modal v-model:show="createVisible" title="新增客户" preset="card" style="width: 680px">
+      <n-form :model="createForm" label-placement="left" label-width="110">
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="客户名称"><n-input v-model:value="createForm.name" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="手机号"><n-input v-model:value="createForm.phone" maxlength="11" /></n-form-item></n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="UnionID"><n-input v-model:value="createForm.unionid" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="OpenID"><n-input v-model:value="createForm.openid" /></n-form-item></n-gi>
+        </n-grid>
+        <n-form-item label="邀请码"><n-input v-model:value="createForm.invite_code" /></n-form-item>
+        <n-form-item label="省/市/区">
+          <n-cascader
+            v-model:value="createForm.region_path"
+            :options="regionCascaderOptions"
+            clearable
+            placeholder="请选择省市区"
+            style="width: 100%"
+            @update:value="() => applyRegion(createForm)"
+          />
+        </n-form-item>
+        <n-form-item label="镇/市场"><n-input v-model:value="createForm.town" /></n-form-item>
+        <n-form-item label="详细地址"><n-input v-model:value="createForm.detail_address" /></n-form-item>
+        <n-form-item label="收货地址"><n-input v-model:value="createForm.address" type="textarea" :rows="2" /></n-form-item>
       </n-form>
-      <template #footer><n-button @click="editVisible=false">取消</n-button><n-button type="primary" :loading="saving" @click="onSave">保存</n-button></template>
+      <template #footer>
+        <n-button @click="createVisible = false">取消</n-button>
+        <n-button type="primary" :loading="saving" @click="onCreate">保存</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="editVisible" title="编辑客户" preset="card" style="width: 720px">
+      <n-form :model="form" label-placement="left" label-width="110">
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="客户名称"><n-input v-model:value="form.name" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="手机号"><n-input v-model:value="form.phone" maxlength="11" /></n-form-item></n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="UnionID"><n-input v-model:value="form.unionid" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="OpenID"><n-input v-model:value="form.openid" /></n-form-item></n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="联系人"><n-input v-model:value="form.contact_name" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="联系电话"><n-input v-model:value="form.contact_phone" /></n-form-item></n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="渠道类型"><n-select v-model:value="form.channel_type" :options="channelOpts" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="状态"><n-select v-model:value="form.status" :options="statusOpts" /></n-form-item></n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi><n-form-item label="信用额度"><n-input-number v-model:value="form.credit_limit" :min="0" :step="1000" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="邀请码"><n-input v-model:value="form.invite_code" /></n-form-item></n-gi>
+        </n-grid>
+        <n-form-item label="省/市/区">
+          <n-cascader
+            v-model:value="form.region_path"
+            :options="regionCascaderOptions"
+            clearable
+            placeholder="请选择省市区"
+            style="width: 100%"
+            @update:value="() => applyRegion(form)"
+          />
+        </n-form-item>
+        <n-form-item label="镇/市场"><n-input v-model:value="form.town" /></n-form-item>
+        <n-form-item label="详细地址"><n-input v-model:value="form.detail_address" /></n-form-item>
+        <n-form-item label="收货地址"><n-input v-model:value="form.address" type="textarea" :rows="2" /></n-form-item>
+      </n-form>
+      <template #footer>
+        <n-button @click="editVisible = false">取消</n-button>
+        <n-button type="primary" :loading="saving" @click="onSave">保存</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="levelVisible" title="设置客户等级" preset="card" style="width: 420px">
+      <n-form label-placement="left" label-width="100">
+        <n-form-item label="客户"><span>{{ levelTarget?.name }}</span></n-form-item>
+        <n-form-item label="客户等级"><n-select v-model:value="levelForm.level_id" :options="levelOpts" /></n-form-item>
+      </n-form>
+      <template #footer>
+        <n-button @click="levelVisible = false">取消</n-button>
+        <n-button type="primary" :loading="saving" @click="onAssignLevel">保存</n-button>
+      </template>
     </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { h, ref, reactive, onMounted, computed } from 'vue'
-import { NButton, NTag, NSpace, NPopconfirm, useMessage, type DataTableColumns, type FormInst, type FormRules } from 'naive-ui'
-import { customerApi, salesApi } from '@/api'
-import { CUSTOMER_STATUS, CUSTOMER_LEVEL } from '@/utils/dict'
-import { formatQty, formatDate, relativeTime } from '@/utils/format'
-import type { Customer, Sales, PageQuery } from '@/types'
+import { h, ref, reactive, computed, onMounted } from 'vue'
+import { NButton, NTag, NPopconfirm, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
+import { adminCustomerApi, levelApi, regionApi } from '@/api'
+import type { AdminCustomer, LevelConfig, RegionNode } from '@/types'
 
-const list = ref<Customer[]>([])
-const total = ref(0)
-const loading = ref(false)
-const query = reactive<PageQuery>({ page: 1, page_size: 20, keyword: '', status: '', level: '', sales_id: '' })
-const sales = ref<Sales[]>([])
-const salesOpts = computed(() => sales.value.map(s => ({ label: s.name, value: s.id })))
 const message = useMessage()
-const editVisible = ref(false)
+const list = ref<AdminCustomer[]>([])
+const levels = ref<LevelConfig[]>([])
+const regionOptions = ref<RegionNode[]>([])
+const keyword = ref('')
+const status = ref('')
+const loading = ref(false)
 const saving = ref(false)
-const formRef = ref<FormInst>()
-const form = reactive<any>({ id: 0, name: '', phone: '', address: '', shop_name: '', status: 'active', level: 'bronze', credit_limit: 0, used_credit: 0, registered_at: '' })
-const rules: FormRules = {
-  name: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
-  phone: [{ required: true, message: '请输入手机号', trigger: 'blur' }, { pattern: /^1[3-9]\d{9}$/, message: '手机号格式不正确', trigger: 'blur' }],
-  level: [{ required: true, message: '请选择等级', trigger: 'change' }],
+const createVisible = ref(false)
+const editVisible = ref(false)
+const levelVisible = ref(false)
+const levelTarget = ref<AdminCustomer | null>(null)
+const createForm = reactive<any>({ name: '', phone: '', unionid: '', openid: '', invite_code: '', region_path: [], province: '', city: '', district: '', town: '', detail_address: '', address: '' })
+const form = reactive<any>({ id: 0, name: '', phone: '', unionid: '', openid: '', contact_name: '', contact_phone: '', channel_type: 'sales', status: 'active', credit_limit: 0, invite_code: '', region_path: [], province: '', city: '', district: '', town: '', detail_address: '', address: '' })
+const levelForm = reactive<any>({ level_id: null })
+
+function mapRegion(node: RegionNode): any {
+  return {
+    label: node.name,
+    value: node.id,
+    children: node.children?.length ? node.children.map(mapRegion) : undefined,
+  }
 }
 
-const columns = computed<DataTableColumns<Customer>>(() => [
+const regionCascaderOptions = computed(() => regionOptions.value.map(mapRegion))
+
+const statusOpts = [
+  { label: '待审核', value: 'pending' },
+  { label: '正常', value: 'active' },
+  { label: '禁止下单', value: 'order_disabled' },
+  { label: '禁止登录', value: 'login_disabled' },
+]
+const channelOpts = [{ label: '销售', value: 'sales' }, { label: '自用', value: 'self_use' }]
+const levelOpts = computed<SelectOption[]>(() => levels.value.map((l) => ({ label: `${l.nickname} (${l.level_id})`, value: l.id, disabled: !l.is_active })))
+
+const columns = computed<DataTableColumns<AdminCustomer>>(() => [
   { title: 'ID', key: 'id', width: 60 },
-  { title: '客户', key: 'name', width: 120 },
-  { title: '店铺', key: 'shop_name', ellipsis: { tooltip: true } },
-  { title: '手机', key: 'phone', width: 130 },
-  { title: '等级', key: 'level', width: 90, render: (r) => h(NTag, { size: 'small', type: r.level === 'vip' ? 'error' : r.level === 'gold' ? 'warning' : 'default' }, { default: () => CUSTOMER_LEVEL[r.level]?.label || r.level }) },
-  { title: '状态', key: 'status', width: 80, render: (r) => h(NTag, { size: 'small', type: r.status === 'active' ? 'success' : r.status === 'pending' ? 'warning' : 'error' }, { default: () => CUSTOMER_STATUS[r.status]?.label }) },
-  { title: '归属销售', key: 'sales_name', width: 100, render: (r) => r.sales_name || '—' },
-  { title: '可用额度', key: 'available_credit', width: 100, render: (r) => `¥${formatQty(r.available_credit)}` },
-  { title: '注册时间', key: 'registered_at', width: 150, render: (r) => formatDate(r.registered_at) },
-  { title: '最近下单', key: 'last_order_at', width: 100, render: (r) => relativeTime(r.last_order_at) },
-  { title: '操作', key: 'actions', width: 200, fixed: 'right', render: (r) => h(NSpace, null, {
-    default: () => [
-      h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
-      h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openBind(r) }, { default: () => '绑定' }),
-      h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, { default: () => '确认删除?', trigger: () => h(NButton, { size: 'small', text: true, type: 'error' }, { default: () => '删除' }) }),
-    ],
-  }) },
+  { title: '客户名称', key: 'name', width: 130, ellipsis: { tooltip: true } },
+  { title: '联系人', key: 'contact_name', width: 100, render: (r) => r.contact_name || '—' },
+  { title: '手机号', key: 'phone', width: 130 },
+  { title: '渠道', key: 'channel_type', width: 80, render: (r) => h(NTag, { size: 'small', type: r.channel_type === 'sales' ? 'primary' : 'default' }, { default: () => r.channel_type === 'sales' ? '销售' : '自用' }) },
+  { title: '等级', key: 'level_nickname', width: 110, render: (r) => r.level_nickname || '—' },
+  { title: '状态', key: 'status', width: 100, render: (r) => h(NTag, { size: 'small', type: statusType(r.status) }, { default: () => statusLabel(r.status) }) },
+  { title: '操作', key: 'actions', width: 190, render: (r) => h('div', [
+    h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
+    h(NButton, { size: 'small', text: true, type: 'primary', style: 'margin-left:8px', onClick: () => openLevel(r) }, { default: () => '设置等级' }),
+    h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, {
+      default: () => '确认删除?',
+      trigger: () => h(NButton, { size: 'small', text: true, type: 'error', style: 'margin-left:8px' }, { default: () => '删除' }),
+    }),
+  ]) },
 ])
+
+function statusLabel(s: string) {
+  const m: Record<string, string> = { pending: '待审核', active: '正常', order_disabled: '禁止下单', login_disabled: '禁止登录' }
+  return m[s] || s
+}
+
+function statusType(s: string) {
+  if (s === 'active') return 'success'
+  if (s === 'pending') return 'warning'
+  if (s === 'order_disabled') return 'warning'
+  return 'error'
+}
 
 async function reload() {
   loading.value = true
-  try { const res = await customerApi.list({ ...query }); list.value = res.items; total.value = res.total } finally { loading.value = false }
+  try { list.value = await adminCustomerApi.list({ keyword: keyword.value || undefined, status: status.value || undefined, page_size: 100 }) } finally { loading.value = false }
 }
-async function loadSales() { sales.value = await salesApi.all() }
-function openCreate() { Object.assign(form, { id: 0, name: '', phone: '', address: '', shop_name: '', status: 'active', level: 'bronze', credit_limit: 0, used_credit: 0, registered_at: '', remark: '' }); editVisible.value = true }
-function openEdit(r: Customer) { Object.assign(form, JSON.parse(JSON.stringify(r))); editVisible.value = true }
-function openBind(r: Customer) { Object.assign(form, r); message.info('绑定功能开发中') }
-async function onSave() {
-  if (!formRef.value) return
-  try { await formRef.value.validate() } catch { return }
+
+async function loadLevels() {
+  levels.value = await levelApi.list()
+}
+
+async function loadRegions() {
+  regionOptions.value = await regionApi.tree()
+}
+
+function findRegionName(nodes: RegionNode[], id: number): string | null {
+  for (const node of nodes) {
+    if (node.id === id) return node.name
+    const found = node.children ? findRegionName(node.children, id) : null
+    if (found) return found
+  }
+  return null
+}
+
+function applyRegion(target: any) {
+  const names = (target.region_path || []).map((id: number) => findRegionName(regionOptions.value, id)).filter(Boolean)
+  target.province = names[0] || ''
+  target.city = names[1] || ''
+  target.district = names[2] || ''
+}
+
+function regionPathByNames(nodes: RegionNode[], province: string, city?: string, district?: string): number[] {
+  for (const p of nodes) {
+    if (p.name === province) {
+      if (!city) return [p.id]
+      for (const c of p.children || []) {
+        if (c.name === city) {
+          if (!district) return [p.id, c.id]
+          for (const d of c.children || []) {
+            if (d.name === district) return [p.id, c.id, d.id]
+          }
+          return [p.id, c.id]
+        }
+      }
+      return [p.id]
+    }
+  }
+  return []
+}
+
+function openCreate() {
+  Object.assign(createForm, { name: '', phone: '', unionid: '', openid: '', invite_code: '', region_path: [], province: '', city: '', district: '', town: '', detail_address: '', address: '' })
+  createVisible.value = true
+}
+
+async function onCreate() {
+  if (!createForm.name || !createForm.phone || !createForm.unionid) {
+    message.warning('请填写客户名称、手机号和 UnionID')
+    return
+  }
   saving.value = true
   try {
-    if (form.id) { await customerApi.update(form.id, form); message.success('已更新') }
-    else { await customerApi.create(form); message.success('已创建') }
-    editVisible.value = false; reload()
+    await adminCustomerApi.register({
+      name: createForm.name,
+      phone: createForm.phone,
+      unionid: createForm.unionid,
+      openid: createForm.openid || null,
+      invite_code: createForm.invite_code || null,
+      province: createForm.province || null,
+      city: createForm.city || null,
+      district: createForm.district || null,
+      town: createForm.town || null,
+      detail_address: createForm.detail_address || null,
+      address: createForm.address || null,
+    })
+    message.success('已创建，等待审核')
+    createVisible.value = false
+    reload()
   } finally { saving.value = false }
 }
-async function onDelete(r: Customer) { await customerApi.remove(r.id); message.success('已删除'); reload() }
-onMounted(() => { loadSales(); reload() })
+
+function openEdit(r: AdminCustomer) {
+  Object.assign(form, JSON.parse(JSON.stringify(r)))
+  form.region_path = regionPathByNames(regionOptions.value, form.province || '', form.city || '', form.district || '')
+  editVisible.value = true
+}
+
+async function onSave() {
+  saving.value = true
+  try {
+    await adminCustomerApi.update(form.id, {
+      name: form.name,
+      phone: form.phone,
+      unionid: form.unionid,
+      openid: form.openid || null,
+      contact_name: form.contact_name || null,
+      contact_phone: form.contact_phone || null,
+      channel_type: form.channel_type,
+      status: form.status,
+      credit_limit: Number(form.credit_limit) || 0,
+      invite_code: form.invite_code || null,
+      province: form.province || null,
+      city: form.city || null,
+      district: form.district || null,
+      town: form.town || null,
+      detail_address: form.detail_address || null,
+      address: form.address || null,
+    })
+    message.success('已更新')
+    editVisible.value = false
+    reload()
+  } finally { saving.value = false }
+}
+
+async function onDelete(r: AdminCustomer) {
+  await adminCustomerApi.remove(r.id)
+  message.success('已删除')
+  reload()
+}
+
+function openLevel(r: AdminCustomer) {
+  levelTarget.value = r
+  levelForm.level_id = r.level_id || null
+  levelVisible.value = true
+}
+
+async function onAssignLevel() {
+  if (!levelTarget.value || !levelForm.level_id) {
+    message.warning('请选择客户等级')
+    return
+  }
+  saving.value = true
+  try {
+    await adminCustomerApi.assignLevel(levelTarget.value.id, levelForm.level_id)
+    message.success('等级已更新')
+    levelVisible.value = false
+    reload()
+  } finally { saving.value = false }
+}
+
+onMounted(() => { loadLevels(); loadRegions(); reload() })
 </script>

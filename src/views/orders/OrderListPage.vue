@@ -32,13 +32,13 @@
 <script setup lang="ts">
 import { h, ref, reactive, watch, onMounted, computed } from 'vue'
 import { NButton, NTag, NSpace, NDropdown, useMessage, useDialog, type DataTableColumns } from 'naive-ui'
-import { orderApi, customerApi, productApi } from '@/api'
+import { orderApi, customerApi } from '@/api'
 import { ORDER_STATUS, PAYMENT_METHOD } from '@/utils/dict'
 import { formatQty, formatDate } from '@/utils/format'
-import type { Order, PageQuery } from '@/types'
+import type { Order } from '@/types'
 
 const list = ref<Order[]>([]); const total = ref(0); const loading = ref(false)
-const query = reactive<PageQuery>({ page: 1, page_size: 20, keyword: '', status: '', payment_method: '' })
+const query = reactive<{ page: number; page_size: number; keyword: string; status: string; payment_method: string; start_date?: string; end_date?: string }>({ page: 1, page_size: 20, keyword: '', status: '', payment_method: '' })
 const dateRange = ref<[number, number] | null>(null); const message = useMessage(); const dialog = useDialog()
 const detailVisible = ref(false); const detail = ref<Order | null>(null)
 const statusOpts = [{label:'待审核',value:'pending_audit'},{label:'已驳回',value:'rejected'},{label:'待分拣',value:'paid'},{label:'分拣中',value:'picking'},{label:'已发货',value:'shipped'},{label:'已完成',value:'completed'},{label:'已取消',value:'cancelled'}]

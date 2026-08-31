@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
       alias: { '@': path.resolve(__dirname, 'src') },
     },
     server: {
-      port: 9173,
+      port: 9021,
       host: '0.0.0.0',
       open: false,
       proxy: env.VITE_API_PROXY_TARGET

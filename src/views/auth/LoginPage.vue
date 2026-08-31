@@ -11,9 +11,10 @@
           <n-input v-model:value="form.username" placeholder="请输入账号" />
         </n-form-item>
         <n-form-item path="password" label="密码">
-          <n-input v-model:value="form.password" type="password" show-password-on="click" placeholder="请输入密码" @keyup.enter="onSubmit" />
+          <n-input v-model:value="form.password" type="password" show-password-on="click" placeholder="请输入密码" />
         </n-form-item>
-        <n-button type="primary" block :loading="loading" attr-type="submit" @click="onSubmit">登录</n-button>
+        <n-alert v-if="errorMsg" type="error" :bordered="false" style="margin-bottom: 12px">{{ errorMsg }}</n-alert>
+        <n-button type="primary" block :loading="loading" attr-type="submit">登录</n-button>
       </n-form>
       <div class="tips"><span>演示账号：admin / 任意 6 位以上密码</span></div>
     </div>
@@ -32,6 +33,7 @@ const auth = useAuthStore()
 const message = useMessage()
 const formRef = ref<FormInst>()
 const loading = ref(false)
+const errorMsg = ref('')
 const form = reactive({ username: 'admin', password: '123456' })
 const rules: FormRules = {
   username: [{ required: true, message: '请输入账号', trigger: 'blur' }],
@@ -42,17 +44,19 @@ const rules: FormRules = {
 }
 
 async function onSubmit() {
+  if (loading.value) return
   if (!formRef.value) return
   try {
     await formRef.value.validate()
   } catch { return }
   loading.value = true
+  errorMsg.value = ''
   try {
     await auth.login(form.username, form.password)
     message.success('登录成功')
     router.push((route.query.redirect as string) || '/dashboard')
-  } catch {
-    message.error('登录失败')
+  } catch (e: any) {
+    errorMsg.value = e?.response?.data?.detail || e?.response?.data?.message || '登录失败，请检查账号或密码'
   } finally {
     loading.value = false
   }

@@ -103,6 +103,7 @@ export interface PriceRule {
 
 // ---------- Customer ----------
 export type CustomerStatus = 'pending' | 'active' | 'disabled'
+export type AdminCustomerStatus = 'pending' | 'active' | 'order_disabled' | 'login_disabled'
 export type CustomerLevel = 'bronze' | 'silver' | 'gold' | 'vip'
 
 export interface Customer {
@@ -122,6 +123,104 @@ export interface Customer {
   registered_at: string
   last_order_at?: string
   remark?: string
+}
+
+export type CustomerChannelType = 'sales' | 'self_use'
+
+export interface AdminCustomer {
+  id: number
+  name: string
+  channel_type: CustomerChannelType
+  credit_limit: number
+  contact_name?: string | null
+  contact_phone?: string | null
+  openid?: string | null
+  unionid: string
+  phone: string
+  level_id?: number | null
+  level_code?: string | null
+  level_nickname?: string | null
+  status: AdminCustomerStatus
+  sales_id?: number | null
+  invite_code?: string | null
+  address?: string | null
+  province?: string | null
+  city?: string | null
+  district?: string | null
+  town?: string | null
+  detail_address?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface CustomerRegisterPayload {
+  name: string
+  phone: string
+  unionid: string
+  openid?: string | null
+  invite_code?: string | null
+  address?: string | null
+  province?: string | null
+  city?: string | null
+  district?: string | null
+  town?: string | null
+  detail_address?: string | null
+}
+
+export interface CustomerUpdatePayload {
+  name?: string
+  channel_type?: CustomerChannelType
+  credit_limit?: number
+  contact_name?: string | null
+  contact_phone?: string | null
+  openid?: string | null
+  unionid?: string
+  phone?: string
+  status?: AdminCustomerStatus
+  sales_id?: number | null
+  invite_code?: string | null
+  address?: string | null
+  province?: string | null
+  city?: string | null
+  district?: string | null
+  town?: string | null
+  detail_address?: string | null
+}
+
+// ---------- Warehouse / Logistics ----------
+export interface Warehouse {
+  id: number
+  name: string
+  type: 'main' | 'return' | 'virtual'
+  created_at?: string
+  updated_at?: string
+}
+
+export interface WarehouseCreatePayload {
+  name: string
+  type: Warehouse['type']
+}
+
+export interface WarehouseUpdatePayload {
+  name?: string
+  type?: Warehouse['type']
+}
+
+export interface WarehouseZone {
+  id: number
+  warehouse_id: number
+  name: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface WarehouseZoneCreatePayload {
+  warehouse_id: number
+  name: string
+}
+
+export interface WarehouseZoneUpdatePayload {
+  name?: string
 }
 
 // ---------- Sales ----------
@@ -149,6 +248,19 @@ export interface SalesPerformance {
   gmv: number
   estimated_commission: number
   new_customers: number
+}
+
+/** Response of GET /sales/ranking */
+export interface SalesRankingItem {
+  sales_id: number
+  sales_name: string
+  period_start: string
+  period_end: string
+  order_count: number
+  gmv: number
+  estimated_commission: number
+  new_customers: number
+  ranking: number
 }
 
 // ---------- Order ----------
@@ -318,59 +430,100 @@ export interface Category {
   children?: Category[]
 }
 
-// ---------- Customer Level Config ----------
-export interface LevelConfig {
+export interface RegionNode {
   id: number
   name: string
-  code: string
-  type: 'retail' | 'wholesale'
-  price_adjustment: number
-  description?: string
+  parent_id: number | null
+  level: number
   sort_order: number
+  children?: RegionNode[]
+}
+
+// ---------- Customer Level Config ----------
+export type CustomerLevelType = 'retail' | 'wholesale'
+export type PriceAdjustmentType = 'percent' | 'amount'
+
+export interface LevelConfig {
+  id: number
+  level_id: string
+  nickname: string
+  type: CustomerLevelType
+  is_system: boolean
+  created_by?: number | null
+  description?: string
   is_active: boolean
+  customer_count?: number
   created_at?: string
+  updated_at?: string
+}
+
+export interface LevelCreatePayload {
+  level_id: string
+  nickname: string
+  type: CustomerLevelType
+  description?: string | null
+  is_active?: boolean
+}
+
+export interface LevelUpdatePayload {
+  level_id?: string
+  nickname?: string
+  type?: CustomerLevelType
+  description?: string | null
+  is_active?: boolean
+}
+
+export interface LevelPricePreview {
+  level_id: number
+  nickname: string
+  price_adjustment_type: PriceAdjustmentType
+  price_adjustment: string
+  suggested_price: string
+  level_price: string
 }
 
 // ---------- SPU / SKU ----------
-export interface SKULevelPrice {
-  id?: number
-  sku_id?: number
-  level_id: number
-  level_name?: string
-  price: number
-}
+export type PriceMethod = 'percent' | 'amount'
 
 export interface ProductSKU {
   id: number
   spu_id: number
-  sku_code: string
-  unit: string
-  conversion_ratio: number
-  is_base: boolean
   cost_price: number
-  default_price: number
-  min_price: number
-  stock: number
-  barcode?: string
-  is_active: boolean
-  level_prices: SKULevelPrice[]
+  price_method: PriceMethod
+  price_value: number
+  barcode?: string | null
+  specs?: Record<string, string>
+  remark?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+export interface SkuAttribute {
+  name: string
+  values: string[]
 }
 
 export interface ProductSPU {
   id: number
+  code: string
   name: string
-  spu_code: string
   category_id: number | null
-  category_name?: string
   brand?: string
-  spec?: string
+  shelf_life_days?: number | null
   description?: string
-  cover?: string
-  status: ProductStatus
-  is_hot: boolean
-  sort_order: number
-  skus: ProductSKU[]
+  main_images?: string[]
+  detail_images?: string[]
+  sku_attributes?: SkuAttribute[]
+  /** 1=启用, 0=停用 */
+  status: number
+  supplier_id?: number
+  is_miniprogram?: boolean
   created_at?: string
+  updated_at?: string
+}
+
+export interface UploadImageResponse {
+  url: string
 }
 
 // ---------- Audit Log ----------
@@ -388,4 +541,67 @@ export interface AuditLog {
   ip_address?: string
   remark?: string
   created_at: string
+}
+
+// ---------- Role & Permission ----------
+export interface RoleConfig {
+  id: number
+  code: string
+  name: string
+  description?: string
+  is_system: boolean
+  sort_order: number
+  is_active: boolean
+  platform: string
+  feature_ids: number[]
+  permission_codes?: string[]
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FeatureNode {
+  id: number
+  parent_id: number | null
+  code: string
+  name: string
+  type: string
+  sort_order: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+  children?: FeatureNode[]
+}
+
+// ---------- System Account ----------
+export interface SystemAccount {
+  id: number
+  username: string
+  real_name?: string | null
+  role_id: number
+  role_code: string
+  role_name: string
+  platform: string
+  is_active: boolean
+  last_login_at?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface AccountCreatePayload {
+  username: string
+  password: string
+  real_name?: string | null
+  role_id: number
+  is_active: boolean
+}
+
+export interface AccountUpdatePayload {
+  real_name?: string | null
+  role_id?: number | null
+  is_active?: boolean | null
+}
+
+export interface AccountPasswordUpdate {
+  new_password: string
+  old_password?: string | null
 }

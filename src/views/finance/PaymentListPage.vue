@@ -22,10 +22,10 @@ import { NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { financeApi } from '@/api'
 import { PAYMENT_METHOD } from '@/utils/dict'
 import { formatQty, formatDate } from '@/utils/format'
-import type { Payment, PageQuery } from '@/types'
+import type { Payment } from '@/types'
 
 const list = ref<Payment[]>([]); const total = ref(0); const loading = ref(false)
-const query = reactive<PageQuery>({ page: 1, page_size: 20, keyword: '', status: '' })
+const query = reactive<{ page: number; page_size: number; keyword: string; status: string; start_date?: string; end_date?: string }>({ page: 1, page_size: 20, keyword: '', status: '' })
 const dateRange = ref<[number, number] | null>(null); const message = useMessage()
 
 const stats = computed(() => [

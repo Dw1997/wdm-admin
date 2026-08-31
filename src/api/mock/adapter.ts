@@ -1,6 +1,7 @@
 // src/api/mock/adapter.ts - Axios mock adapter that routes to in-memory services.
 import type { AxiosAdapter, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import dayjs from 'dayjs'
+import { regionTree } from './db2'
 import {
   authService,
   productService,
@@ -16,6 +17,11 @@ import {
   levelService,
   spuService,
   auditLogService,
+  roleService,
+  featureService,
+  accountService,
+  adminCustomerService,
+  warehouseService,
 } from './services2'
 
 type Handler = (config: InternalAxiosRequestConfig) => Promise<unknown> | unknown
@@ -96,26 +102,30 @@ route('GET', '/products/:id/price', (c) => {
 })
 
 // -------- Customers --------
-route('GET', '/customers', (c) => customerService.list(params(c) as any))
-route('POST', '/customers', (c) => customerService.create(JSON.parse(c.data || '{}')))
-route('GET', '/customers/:id', (c) => customerService.get(Number(c.url!.split('/').pop())))
+route('GET', '/customers', (c) => adminCustomerService.list(params(c) as any))
+route('GET', '/customers/all', () => adminCustomerService.list({ page_size: 100 }))
+route('POST', '/customers/register', (c) => adminCustomerService.register(JSON.parse(c.data || '{}')))
+route('GET', '/customers/:id', (c) => adminCustomerService.get(Number(extractId(c))))
 route('PUT', '/customers/:id', (c) => {
-  const id = Number(c.url!.split('/').slice(-2, -1)[0])
-  return customerService.update(id, JSON.parse(c.data || '{}'))
+  const id = Number(extractId(c))
+  return adminCustomerService.update(id, JSON.parse(c.data || '{}'))
 })
-route('POST', '/customers/:id/audit', (c) => {
-  const id = Number(c.url!.split('/').slice(-2, -1)[0])
+route('PUT', '/customers/:id/level', (c) => {
+  const id = Number(extractId(c))
   const body = JSON.parse(c.data || '{}')
-  return customerService.audit(id, body.approved, body.sales_id)
+  return adminCustomerService.assignLevel(id, Number(body.level_id))
 })
 route('DELETE', '/customers/:id', (c) => {
-  const id = Number(c.url!.split('/').pop())
-  return customerService.remove(id)
+  return adminCustomerService.remove(Number(extractId(c)))
 })
 
 // -------- Sales --------
 route('GET', '/sales', (c) => salesService.list(params(c) as any))
 route('GET', '/sales/all', () => salesService.all())
+route('GET', '/sales/ranking', (c) => {
+  const p = params(c)
+  return salesService.ranking(p.period_start || dayjs().subtract(30, 'day').format('YYYY-MM-DD'), p.period_end || dayjs().format('YYYY-MM-DD'))
+})
 route('GET', '/sales/:id', (c) => salesService.get(Number(c.url!.split('/').pop())))
 route('POST', '/sales', (c) => salesService.create(JSON.parse(c.data || '{}')))
 route('PUT', '/sales/:id', (c) => {
@@ -207,6 +217,7 @@ route('GET', '/dashboard/alerts', () => dashboardService.alerts())
 
 // -------- Categories (4-level tree) --------
 route('GET', '/categories/tree', () => categoryService.tree())
+route('GET', '/regions/tree', () => regionTree)
 route('GET', '/categories', (c) => categoryService.list(params(c).parent_id ? Number(params(c).parent_id) : undefined))
 route('POST', '/categories', (c) => categoryService.create(JSON.parse(c.data || '{}')))
 route('PUT', '/categories/:id', (c) => categoryService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
@@ -215,20 +226,73 @@ route('DELETE', '/categories/:id', (c) => categoryService.remove(Number(extractI
 // -------- Customer Levels --------
 route('GET', '/customer-levels', () => levelService.list())
 route('POST', '/customer-levels', (c) => levelService.create(JSON.parse(c.data || '{}')))
+route('GET', '/customer-levels/:id/price-preview', (c) => {
+  const id = Number((c.url || '').split('?')[0].split('/').slice(-2, -1)[0])
+  return levelService.preview(id, params(c).suggested_price || '0')
+})
+route('GET', '/customer-levels/:id', (c) => levelService.get(Number(extractId(c))))
 route('PUT', '/customer-levels/:id', (c) => levelService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
 route('DELETE', '/customer-levels/:id', (c) => levelService.remove(Number(extractId(c))))
 
 // -------- SPU/SKU --------
-route('GET', '/products/spus', (c) => spuService.list({ keyword: params(c).keyword, category_id: params(c).category_id ? Number(params(c).category_id) : undefined }))
-route('GET', '/products/spus/all', () => spuService.list({}))
-route('GET', '/products/spus/:id', (c) => spuService.get(Number(extractId(c))))
-route('POST', '/products/spus', (c) => spuService.create(JSON.parse(c.data || '{}')))
-route('PUT', '/products/spus/:id', (c) => spuService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
-route('DELETE', '/products/spus/:id', (c) => spuService.remove(Number(extractId(c))))
-route('PUT', '/products/skus/:id', (c) => spuService.updateSKU(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('GET', '/spus', (c) => spuService.list({ keyword: params(c).keyword, category_id: params(c).category_id ? Number(params(c).category_id) : undefined }))
+route('GET', '/spus/:id', (c) => spuService.get(Number(extractId(c))))
+route('POST', '/spus', (c) => spuService.create(JSON.parse(c.data || '{}')))
+route('PUT', '/spus/:id', (c) => spuService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/spus/:id', (c) => spuService.remove(Number(extractId(c))))
+route('GET', '/spus/:id/skus', (c) => spuService.listSKUs(Number((c.url!.split('/').filter(Boolean))[2])))
+route('POST', '/spus/:id/skus', (c) => {
+  const spuId = Number((c.url!.split('/').filter(Boolean))[2])
+  return spuService.createSKU(spuId, JSON.parse(c.data || '{}'))
+})
+route('POST', '/spus/:id/skus/generate', (c) => {
+  const spuId = Number((c.url!.split('/').filter(Boolean))[2])
+  return spuService.generateSKUs(spuId, JSON.parse(c.data || '{}'))
+})
+route('GET', '/skus', (c) => spuService.listSkus(params(c) as any))
+route('PUT', '/skus/:id', (c) => spuService.updateSKU(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/skus/:id', (c) => spuService.deleteSKU(Number(extractId(c))))
+
+// -------- Upload --------
+route('POST', '/upload/image', () => ({ url: `/uploads/mock-${Date.now()}.png` }))
 
 // -------- Audit Logs --------
 route('GET', '/audit-logs', (c) => auditLogService.list({ target_type: params(c).target_type, action: params(c).action, limit: params(c).limit ? Number(params(c).limit) : undefined }))
+
+// -------- System Roles & Features --------
+route('GET', '/system/roles', () => roleService.list())
+route('POST', '/system/roles', (c) => roleService.create(JSON.parse(c.data || '{}')))
+route('PUT', '/system/roles/:id', (c) => roleService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/system/roles/:id', (c) => roleService.remove(Number(extractId(c))))
+route('PUT', '/system/roles/:id/permissions', (c) => {
+  const id = Number(c.url!.split('/').slice(-2, -1)[0])
+  const body = JSON.parse(c.data || '{}')
+  return roleService.setFeatures(id, body.feature_ids || [])
+})
+route('GET', '/system/features/tree', () => featureService.tree())
+route('POST', '/system/features', (c) => featureService.create(JSON.parse(c.data || '{}')))
+route('PUT', '/system/features/:id', (c) => featureService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/system/features/:id', (c) => featureService.remove(Number(extractId(c))))
+route('GET', '/system/accounts', (c) => accountService.list(params(c).keyword))
+route('POST', '/system/accounts', (c) => accountService.create(JSON.parse(c.data || '{}')))
+route('GET', '/system/accounts/:id', (c) => accountService.get(Number(extractId(c))))
+route('PUT', '/system/accounts/:id', (c) => accountService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('PUT', '/system/accounts/:id/password', (c) => {
+  const id = Number(c.url!.split('/').slice(-2, -1)[0])
+  const body = JSON.parse(c.data || '{}')
+  return accountService.updatePassword(id, body.new_password)
+})
+route('DELETE', '/system/accounts/:id', (c) => accountService.remove(Number(extractId(c))))
+
+// -------- Warehouses / Logistics --------
+route('GET', '/warehouses', () => warehouseService.list())
+route('POST', '/warehouses', (c) => warehouseService.create(JSON.parse(c.data || '{}')))
+route('PUT', '/warehouses/:id', (c) => warehouseService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/warehouses/:id', (c) => warehouseService.remove(Number(extractId(c))))
+route('GET', '/warehouse-zones', () => warehouseService.listZones())
+route('POST', '/warehouse-zones', (c) => warehouseService.createZone(JSON.parse(c.data || '{}')))
+route('PUT', '/warehouse-zones/:id', (c) => warehouseService.updateZone(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/warehouse-zones/:id', (c) => warehouseService.removeZone(Number(extractId(c))))
 
 // -------- Adapter --------
 export const mockAdapter: AxiosAdapter = (config) => {

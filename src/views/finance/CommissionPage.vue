@@ -19,10 +19,10 @@ import { h, ref, reactive, onMounted, computed } from 'vue'
 import { NTag, useMessage, useDialog, type DataTableColumns } from 'naive-ui'
 import { financeApi, salesApi } from '@/api'
 import { formatQty, formatDate } from '@/utils/format'
-import type { Commission, Sales, PageQuery } from '@/types'
+import type { Commission, Sales } from '@/types'
 
 const list = ref<Commission[]>([]); const total = ref(0); const loading = ref(false)
-const query = reactive<PageQuery>({ page: 1, page_size: 50, sales_id: '', status: '' })
+const query = reactive<{ page: number; page_size: number; sales_id: number | null; status: string }>({ page: 1, page_size: 50, sales_id: null, status: '' })
 const sales = ref<Sales[]>([]); const salesOpts = computed(() => sales.value.map(s => ({ label: s.name, value: s.id })))
 const selected = ref<number[]>([]); const message = useMessage(); const dialog = useDialog()
 
@@ -46,7 +46,7 @@ const columns = computed<DataTableColumns<Commission>>(() => [
   { title: '时间', key: 'created_at', width: 120, render: (r) => formatDate(r.created_at) },
 ])
 
-function onSelect(keys: number[]) { selected.value = keys }
+function onSelect(keys: (string | number)[]) { selected.value = keys as number[] }
 async function reload() { loading.value = true; try { const res = await financeApi.commissions({ ...query }); list.value = res.items; total.value = res.total } finally { loading.value = false } }
 function settle() { dialog.warning({ title: '批量结算', content: `确认结算 ${selected.value.length} 条提成？`, positiveText: '确认', negativeText: '取消', onPositiveClick: async () => { await financeApi.settleCommissions(selected.value); message.success('已结算'); selected.value = []; reload() } }) }
 onMounted(() => { salesApi.all().then(s => sales.value = s); reload() })

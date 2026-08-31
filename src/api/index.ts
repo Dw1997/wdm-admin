@@ -3,12 +3,18 @@ import { get, post, put, del } from './http'
 import type {
   UserInfo,
   TokenResponse,
-  Product,
-  ProductSummary,
-  PriceResponse,
   Customer,
+  AdminCustomer,
+  CustomerRegisterPayload,
+  CustomerUpdatePayload,
+  Warehouse,
+  WarehouseCreatePayload,
+  WarehouseUpdatePayload,
+  WarehouseZone,
+  WarehouseZoneCreatePayload,
+  WarehouseZoneUpdatePayload,
   Sales,
-  SalesPerformance,
+  SalesRankingItem,
   Order,
   OrderItem,
   PriceStrategy,
@@ -22,9 +28,21 @@ import type {
   SalesTrendPoint,
   AlertItem,
   Category,
+  RegionNode,
   LevelConfig,
+  LevelCreatePayload,
+  LevelUpdatePayload,
+  LevelPricePreview,
   ProductSPU,
+  ProductSKU,
+  SkuAttribute,
   AuditLog,
+  RoleConfig,
+  FeatureNode,
+  SystemAccount,
+  AccountCreatePayload,
+  AccountUpdatePayload,
+  UploadImageResponse,
   PageQuery,
   PageResult,
 } from '@/types'
@@ -37,17 +55,21 @@ export const authApi = {
   me: () => get<UserInfo>('/auth/me'),
 }
 
-// Products
+// Products — SPU / SKU (backend /spus, /skus)
 export const productApi = {
-  list: (q: PageQuery = {}) => get<PageResult<Product>>('/products', { params: q }),
-  all: () => get<Product[]>('/products/all'),
-  summary: () => get<ProductSummary[]>('/products/summary'),
-  get: (id: number) => get<Product>(`/products/${id}`),
-  create: (payload: Omit<Product, 'id' | 'created_at' | 'updated_at'>) => post<Product>('/products', payload),
-  update: (id: number, payload: Partial<Product>) => put<Product>(`/products/${id}`, payload),
-  remove: (id: number) => del<void>(`/products/${id}`),
-  price: (productId: number, customerId: number, unit = '包') =>
-    get<PriceResponse>(`/products/${productId}/price`, { params: { customer_id: customerId, unit } }),
+  spus: (q: { keyword?: string; category_id?: number; page?: number; page_size?: number } = {}) =>
+    get<ProductSPU[]>('/spus', { params: q }),
+  spu: (id: number) => get<ProductSPU>(`/spus/${id}`),
+  createSpu: (payload: any) => post<ProductSPU>('/spus', payload),
+  updateSpu: (id: number, payload: Partial<ProductSPU>) => put<ProductSPU>(`/spus/${id}`, payload),
+  removeSpu: (id: number) => del<void>(`/spus/${id}`),
+  skus: (spuId: number) => get<ProductSKU[]>(`/spus/${spuId}/skus`),
+  allSkus: (q: { page?: number; page_size?: number } = {}) => get<ProductSKU[]>('/skus', { params: q }),
+  createSku: (spuId: number, payload: Partial<ProductSKU>) => post<ProductSKU>(`/spus/${spuId}/skus`, payload),
+  updateSku: (skuId: number, payload: Partial<ProductSKU>) => put<ProductSKU>(`/skus/${skuId}`, payload),
+  removeSku: (skuId: number) => del<void>(`/skus/${skuId}`),
+  generateSkus: (spuId: number, payload: { attributes: SkuAttribute[]; overwrite?: boolean }) =>
+    post<ProductSKU[]>(`/spus/${spuId}/skus/generate`, payload),
 }
 
 // Customers
@@ -62,6 +84,27 @@ export const customerApi = {
   remove: (id: number) => del<void>(`/customers/${id}`),
 }
 
+export const adminCustomerApi = {
+  list: (q: { keyword?: string; status?: string; page?: number; page_size?: number } = {}) =>
+    get<AdminCustomer[]>('/customers', { params: q }),
+  register: (payload: CustomerRegisterPayload) => post<AdminCustomer>('/customers/register', payload),
+  get: (id: number) => get<AdminCustomer>(`/customers/${id}`),
+  update: (id: number, payload: CustomerUpdatePayload) => put<AdminCustomer>(`/customers/${id}`, payload),
+  remove: (id: number) => del<void>(`/customers/${id}`),
+  assignLevel: (id: number, level_id: number) => put<AdminCustomer>(`/customers/${id}/level`, { level_id }),
+}
+
+export const warehouseApi = {
+  list: () => get<Warehouse[]>('/warehouses'),
+  create: (payload: WarehouseCreatePayload) => post<Warehouse>('/warehouses', payload),
+  update: (id: number, payload: WarehouseUpdatePayload) => put<Warehouse>(`/warehouses/${id}`, payload),
+  remove: (id: number) => del<void>(`/warehouses/${id}`),
+  zones: () => get<WarehouseZone[]>('/warehouse-zones'),
+  createZone: (payload: WarehouseZoneCreatePayload) => post<WarehouseZone>('/warehouse-zones', payload),
+  updateZone: (id: number, payload: WarehouseZoneUpdatePayload) => put<WarehouseZone>(`/warehouse-zones/${id}`, payload),
+  removeZone: (id: number) => del<void>(`/warehouse-zones/${id}`),
+}
+
 // Sales
 export const salesApi = {
   list: (q: PageQuery = {}) => get<PageResult<Sales>>('/sales', { params: q }),
@@ -70,8 +113,8 @@ export const salesApi = {
   create: (payload: Omit<Sales, 'id' | 'joined_at' | 'total_customers' | 'active_customers' | 'total_gmv' | 'estimated_commission'>) =>
     post<Sales>('/sales', payload),
   update: (id: number, payload: Partial<Sales>) => put<Sales>(`/sales/${id}`, payload),
-  performance: (id: number, start: string, end: string) =>
-    get<SalesPerformance>(`/sales/${id}/performance`, { params: { period_start: start, period_end: end } }),
+  ranking: (start: string, end: string) =>
+    get<SalesRankingItem[]>('/sales/ranking', { params: { period_start: start, period_end: end } }),
 }
 
 // Orders
@@ -125,27 +168,59 @@ export const categoryApi = {
   remove: (id: number) => del<void>(`/categories/${id}`),
 }
 
+export const regionApi = {
+  tree: () => get<RegionNode[]>('/regions/tree'),
+}
+
 // Customer Levels
 export const levelApi = {
   list: () => get<LevelConfig[]>('/customer-levels'),
-  create: (payload: any) => post<LevelConfig>('/customer-levels', payload),
-  update: (id: number, payload: any) => put<LevelConfig>(`/customer-levels/${id}`, payload),
+  get: (id: number) => get<LevelConfig>(`/customer-levels/${id}`),
+  create: (payload: LevelCreatePayload) => post<LevelConfig>('/customer-levels', payload),
+  update: (id: number, payload: LevelUpdatePayload) => put<LevelConfig>(`/customer-levels/${id}`, payload),
   remove: (id: number) => del<void>(`/customer-levels/${id}`),
+  preview: (id: number, suggestedPrice: number | string) =>
+    get<LevelPricePreview>(`/customer-levels/${id}/price-preview`, { params: { suggested_price: suggestedPrice } }),
 }
 
-// SPU/SKU
-export const spuApi = {
-  list: (q: { keyword?: string; category_id?: number } = {}) => get<ProductSPU[]>('/products/spus', { params: q }),
-  all: () => get<ProductSPU[]>('/products/spus/all'),
-  get: (id: number) => get<ProductSPU>(`/products/spus/${id}`),
-  create: (payload: any) => post<ProductSPU>('/products/spus', payload),
-  update: (id: number, payload: any) => put<ProductSPU>(`/products/spus/${id}`, payload),
-  remove: (id: number) => del<void>(`/products/spus/${id}`),
-  updateSKU: (skuId: number, payload: any) => put<void>(`/products/skus/${skuId}`, payload),
+// SPU/SKU endpoints are exposed via `productApi` (see above).
+
+export const uploadApi = {
+  image: (file: File | Blob) => {
+    const fd = new FormData()
+    fd.append('file', file)
+    return post<UploadImageResponse>('/upload/image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 }
 
 // Audit Logs
 export const auditLogApi = {
   list: (q: { target_type?: string; action?: string; limit?: number } = {}) =>
     get<AuditLog[]>('/audit-logs', { params: q }),
+}
+
+// Roles & Permissions
+export const roleApi = {
+  list: () => get<RoleConfig[]>('/system/roles'),
+  create: (payload: Omit<RoleConfig, 'id' | 'created_at' | 'updated_at' | 'is_system' | 'permission_codes'>) => post<RoleConfig>('/system/roles', payload),
+  update: (id: number, payload: Partial<RoleConfig>) => put<RoleConfig>(`/system/roles/${id}`, payload),
+  remove: (id: number) => del<void>(`/system/roles/${id}`),
+  setFeatures: (id: number, feature_ids: number[]) => put<RoleConfig>(`/system/roles/${id}/permissions`, { feature_ids }),
+}
+
+export const featureApi = {
+  tree: () => get<FeatureNode[]>('/system/features/tree'),
+  create: (payload: Omit<FeatureNode, 'id' | 'created_at' | 'updated_at' | 'children'>) => post<FeatureNode>('/system/features', payload),
+  update: (id: number, payload: Partial<FeatureNode>) => put<FeatureNode>(`/system/features/${id}`, payload),
+  remove: (id: number) => del<void>(`/system/features/${id}`),
+}
+
+export const accountApi = {
+  list: (keyword?: string) => get<SystemAccount[]>('/system/accounts', { params: { keyword } }),
+  get: (id: number) => get<SystemAccount>(`/system/accounts/${id}`),
+  create: (payload: AccountCreatePayload) => post<SystemAccount>('/system/accounts', payload),
+  update: (id: number, payload: AccountUpdatePayload) => put<SystemAccount>(`/system/accounts/${id}`, payload),
+  remove: (id: number) => del<void>(`/system/accounts/${id}`),
+  updatePassword: (id: number, new_password: string, old_password?: string | null) =>
+    put<void>(`/system/accounts/${id}/password`, old_password ? { new_password, old_password } : { new_password }),
 }

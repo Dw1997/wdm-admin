@@ -28,10 +28,10 @@ import { NTag, type DataTableColumns } from 'naive-ui'
 import dayjs from 'dayjs'
 import { salesApi, financeApi } from '@/api'
 import { formatQty } from '@/utils/format'
-import type { SalesPerformance, Commission } from '@/types'
+import type { SalesPerformance, SalesRankingItem, Commission } from '@/types'
 
 const period = ref('30'); const performance = ref<SalesPerformance | null>(null)
-const ranking = ref<(SalesPerformance & { ranking: number })[]>([]); const loading = ref(false)
+const ranking = ref<SalesRankingItem[]>([]); const loading = ref(false)
 const commissions = ref<Commission[]>([])
 
 const summary = computed(() => [
@@ -41,7 +41,7 @@ const summary = computed(() => [
   { key: 'comm', label: '团队提成', value: `¥${formatQty(ranking.value.reduce((s, r) => s + r.estimated_commission, 0))}`, color: 'linear-gradient(135deg,#7c3aed,#a855f7)', icon: '🏆' },
 ])
 
-const columns = computed<DataTableColumns<SalesPerformance & { ranking: number }>>(() => [
+const columns = computed<DataTableColumns<SalesRankingItem>>(() => [
   { title: '排名', key: 'ranking', width: 70, render: (r) => r.ranking <= 3 ? ['🥇','🥈','🥉'][r.ranking-1] + ` ${r.ranking}` : `${r.ranking}` },
   { title: '销售', key: 'sales_name', width: 100 },
   { title: '订单数', key: 'order_count', width: 80 },
@@ -62,8 +62,16 @@ const commissionColumns: DataTableColumns<Commission> = [
 async function reload() {
   loading.value = true; const [s, e] = period.value === 'month' ? [dayjs().startOf('month').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')] : [dayjs().subtract(Number(period.value)-1,'day').format('YYYY-MM-DD'), dayjs().format('YYYY-MM-DD')]
   try {
-    const [perf, rank, comms] = await Promise.all([salesApi.performance(s, e), salesApi.ranking(s, e), financeApi.commissions({ page: 1, page_size: 10 })])
-    performance.value = perf; ranking.value = rank; commissions.value = comms.items
+    const [rank, comms] = await Promise.all([salesApi.ranking(s, e), financeApi.commissions({ page: 1, page_size: 10 })])
+    ranking.value = rank
+    performance.value = rank.length ? {
+      sales_id: 0, sales_name: '团队', period_start: s, period_end: e,
+      order_count: rank.reduce((a, r) => a + r.order_count, 0),
+      gmv: rank.reduce((a, r) => a + r.gmv, 0),
+      estimated_commission: rank.reduce((a, r) => a + r.estimated_commission, 0),
+      new_customers: rank.reduce((a, r) => a + r.new_customers, 0),
+    } : null
+    commissions.value = comms.items
   } finally { loading.value = false }
 }
 onMounted(reload)

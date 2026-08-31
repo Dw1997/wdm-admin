@@ -17,6 +17,7 @@ import type {
   Customer,
   Sales,
   SalesPerformance,
+  SalesRankingItem,
   Order,
   OrderItem,
   PriceStrategy,
@@ -48,7 +49,7 @@ export const authService = {
       throw err
     }
     const role = username.startsWith('sales') ? 'sales' : 'admin'
-    const userId = role === 'sales' ? 1 : 0
+    const userId = role === 'sales' ? 2 : 1
     return {
       access_token: `mock-access-${userId}-${Date.now()}`,
       refresh_token: `mock-refresh-${userId}-${Date.now()}`,
@@ -58,7 +59,7 @@ export const authService = {
   },
   async me() {
     await delay(100)
-    return { id: 0, username: 'admin', real_name: '系统管理员', role: 'admin' as const }
+    return { id: 1, username: 'admin', real_name: '系统管理员', role: 'admin' as const }
   },
   async logout() {
     await delay(50)
@@ -323,6 +324,30 @@ export const salesService = {
       estimated_commission: gmv * 0.05,
       new_customers: newCustomers,
     }
+  },
+  async ranking(start: string, end: string): Promise<SalesRankingItem[]> {
+    await delay()
+    const inRange = (d: string) => dayjs(d).isAfter(dayjs(start).subtract(1, 'day')) && dayjs(d).isBefore(dayjs(end).add(1, 'day'))
+    const rows = sales.map((s) => {
+      const myOrders = orders.filter((o) => o.sales_id === s.id && inRange(o.created_at))
+      const gmv = myOrders.reduce((sum, o) => sum + o.total_amount, 0)
+      const newCustomers = customers.filter(
+        (c) => c.sales_id === s.id && inRange(c.registered_at),
+      ).length
+      return {
+        sales_id: s.id,
+        sales_name: s.name,
+        period_start: start,
+        period_end: end,
+        order_count: myOrders.length,
+        gmv,
+        estimated_commission: gmv * 0.05,
+        new_customers: newCustomers,
+      }
+    })
+    return rows
+      .sort((a, b) => b.gmv - a.gmv)
+      .map((r, i) => ({ ...r, ranking: i + 1 }))
   },
 }
 

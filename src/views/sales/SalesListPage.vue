@@ -14,7 +14,7 @@
       <template #footer><n-button @click="editVisible=false">取消</n-button><n-button type="primary" :loading="saving" @click="onSave">保存</n-button></template>
     </n-modal>
     <n-modal v-model:show="shareVisible" title="推广链接" preset="card" style="width: 520px">
-      <n-input :value="shareLink" readonly><template #append><n-button @click="copyText(shareLink)">复制</n-button></template></n-input>
+      <n-input-group><n-input :value="shareLink" readonly /><n-button @click="copyText(shareLink)">复制</n-button></n-input-group>
     </n-modal>
   </div>
 </template>

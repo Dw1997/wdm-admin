@@ -32,11 +32,19 @@ http.interceptors.response.use(
   (error) => {
     const status = error?.response?.status
     const detail = error?.response?.data?.detail || error?.response?.data?.message || error.message
+    const url = error.config?.url || ''
     if (status === 401) {
       const auth = useAuthStore()
-      auth.logout()
-      message.error('登录已过期，请重新登录')
-      window.location.href = '/login'
+      if (url.includes('/auth/login')) {
+        return Promise.reject(error)
+      }
+      if (url.includes('/auth/logout')) {
+        auth.clearSession()
+      } else {
+        auth.logout()
+        message.error('登录已过期，请重新登录')
+        window.location.href = '/login'
+      }
     } else if (status === 403) {
       message.error('没有权限')
     } else if (status && status >= 500) {
@@ -51,17 +59,17 @@ http.interceptors.response.use(
 )
 
 export async function get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  return http.get<T, T>(url, config)
+  return http.get<T, T>(url, config) as unknown as Promise<T>
 }
 
 export async function post<T, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig): Promise<T> {
-  return http.post<T, T>(url, data, config)
+  return http.post<T, T>(url, data, config) as unknown as Promise<T>
 }
 
 export async function put<T, D = unknown>(url: string, data?: D, config?: AxiosRequestConfig): Promise<T> {
-  return http.put<T, T>(url, data, config)
+  return http.put<T, T>(url, data, config) as unknown as Promise<T>
 }
 
 export async function del<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  return http.delete<T, T>(url, config)
+  return http.delete<T, T>(url, config) as unknown as Promise<T>
 }

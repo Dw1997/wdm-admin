@@ -4,7 +4,7 @@
   --sidebar-bg: #1a1a2e;
   --sidebar-text: #c0c4cc;
   --sidebar-text-active: #dc2626;
-  --layout-bg: #f5f5f7;
+  --layout-bg: #e8f2ff;
 }
 
 * { box-sizing: border-box; }
@@ -36,6 +36,12 @@ a { text-decoration: none; color: inherit; }
   margin-bottom: 16px;
 }
 .pagination-bar { display: flex; justify-content: flex-end; margin-top: 16px; }
+
+.n-modal .n-card__footer {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
 
 .stat-card { display: flex; align-items: center; gap: 16px; padding: 4px 8px; }
 .stat-card .icon-wrap {

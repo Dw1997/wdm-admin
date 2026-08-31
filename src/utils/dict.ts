@@ -1,5 +1,5 @@
 // src/utils/dict.ts - Static dictionary / enum label helpers.
-import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType } from '@/types'
+import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType } from '@/types'
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }> = {
   pending_audit: { label: '待审核', type: 'warning' },
@@ -31,6 +31,16 @@ export const CUSTOMER_LEVEL: Record<CustomerLevel, { label: string; type: string
   silver: { label: '白银', type: 'info' },
   gold: { label: '黄金', type: 'warning' },
   vip: { label: 'VIP', type: 'danger' },
+}
+
+export const CUSTOMER_LEVEL_TYPE: Record<CustomerLevelType, { label: string; type: 'primary' | 'default' }> = {
+  retail: { label: '零售', type: 'default' },
+  wholesale: { label: '批发', type: 'primary' },
+}
+
+export const PRICE_ADJUSTMENT_TYPE: Record<PriceAdjustmentType, string> = {
+  percent: '百分比浮动',
+  amount: '固定金额加减',
 }
 
 export const PRODUCT_STATUS: Record<ProductStatus, { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }> = {
