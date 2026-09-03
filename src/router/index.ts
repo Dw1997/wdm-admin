@@ -65,7 +65,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'suggested',
         name: 'prices-suggested',
-        component: () => import('@/views/prices/PriceModulePlaceholderPage.vue'),
+        component: () => import('@/views/prices/SuggestedPricePage.vue'),
         meta: { title: '建议价格' },
       },
       {
