@@ -526,6 +526,119 @@ export interface UploadImageResponse {
   url: string
 }
 
+// ---------- Price Center (level-prices / customer-sku-prices / price-books) ----------
+export interface LevelPrice {
+  id: number
+  level_id: number
+  level_code: string
+  level_nickname: string
+  sku_id: number | null
+  spu_id: number | null
+  spu_name: string | null
+  sku_specs: Record<string, string> | null
+  sku_remark: string | null
+  price_method: PriceMethod
+  price_value: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface LevelPriceUpsert {
+  /** 为空表示等级默认规则 */
+  sku_id?: number | null
+  price_method: PriceMethod
+  price_value: number | string
+}
+
+export interface LevelPriceRulePreview {
+  level_id: number
+  level_code: string
+  level_nickname: string
+  sku_id: number | null
+  /** 命中的规则: sku=SKU专属, level=等级默认, none=无规则 */
+  rule_source: 'sku' | 'level' | 'none'
+  price_method: string | null
+  price_value: string | null
+  suggested_price: string
+  level_price: string
+}
+
+export interface CustomerSkuPrice {
+  id: number
+  customer_id: number
+  customer_name: string
+  sku_id: number
+  spu_id: number
+  spu_name: string
+  sku_specs: Record<string, string>
+  sku_remark: string | null
+  price: string
+  created_by?: number | null
+  created_by_name?: string | null
+  updated_by?: number | null
+  updated_by_name?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface CustomerSkuPriceUpsert {
+  price: number | string
+}
+
+export type PriceSource = 'customer_fixed' | 'level_sku' | 'level_default' | 'suggested'
+
+export interface CustomerSkuPricePreview {
+  customer_id: number
+  sku_id: number
+  suggested_price: string
+  level_price: string
+  final_price: string
+  price_source: PriceSource
+  customer_sku_price_id: number | null
+}
+
+export type PriceChannelType = 'county_wholesale' | 'street_vendor'
+
+export interface PriceBook {
+  id: number
+  name: string
+  channel_type: PriceChannelType
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface PriceBookCreatePayload {
+  name: string
+  channel_type: PriceChannelType
+}
+
+export interface PriceBookUpdatePayload {
+  name?: string | null
+  channel_type?: PriceChannelType | null
+}
+
+export interface PriceBookItem {
+  id: number
+  book_id: number
+  spu_id: number
+  price: string
+  effective_date: string
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface PriceBookItemCreatePayload {
+  book_id: number
+  spu_id: number
+  price: number | string
+  effective_date: string
+}
+
+export interface PriceBookItemUpdatePayload {
+  price?: number | string | null
+  effective_date?: string | null
+}
+
 // ---------- Audit Log ----------
 export interface AuditLog {
   id: number

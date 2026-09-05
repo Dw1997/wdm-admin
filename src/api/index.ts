@@ -33,6 +33,18 @@ import type {
   LevelCreatePayload,
   LevelUpdatePayload,
   LevelPricePreview,
+  LevelPrice,
+  LevelPriceUpsert,
+  LevelPriceRulePreview,
+  CustomerSkuPrice,
+  CustomerSkuPriceUpsert,
+  CustomerSkuPricePreview,
+  PriceBook,
+  PriceBookCreatePayload,
+  PriceBookUpdatePayload,
+  PriceBookItem,
+  PriceBookItemCreatePayload,
+  PriceBookItemUpdatePayload,
   ProductSPU,
   ProductSKU,
   SkuAttribute,
@@ -56,15 +68,19 @@ export const authApi = {
 }
 
 // Products — SPU / SKU (backend /spus, /skus)
+// Real backend paginates /spus and /skus into PageResult; mock returns bare arrays — normalize to arrays.
+const toItems = <T>(v: T[] | PageResult<T>): T[] => (Array.isArray(v) ? v : v.items)
+
 export const productApi = {
   spus: (q: { keyword?: string; category_id?: number; page?: number; page_size?: number } = {}) =>
-    get<ProductSPU[]>('/spus', { params: q }),
+    get<ProductSPU[] | PageResult<ProductSPU>>('/spus', { params: q }).then(toItems),
   spu: (id: number) => get<ProductSPU>(`/spus/${id}`),
   createSpu: (payload: any) => post<ProductSPU>('/spus', payload),
   updateSpu: (id: number, payload: Partial<ProductSPU>) => put<ProductSPU>(`/spus/${id}`, payload),
   removeSpu: (id: number) => del<void>(`/spus/${id}`),
   skus: (spuId: number) => get<ProductSKU[]>(`/spus/${spuId}/skus`),
-  allSkus: (q: { page?: number; page_size?: number } = {}) => get<ProductSKU[]>('/skus', { params: q }),
+  allSkus: (q: { page?: number; page_size?: number } = {}) =>
+    get<ProductSKU[] | PageResult<ProductSKU>>('/skus', { params: q }).then(toItems),
   createSku: (spuId: number, payload: Partial<ProductSKU>) => post<ProductSKU>(`/spus/${spuId}/skus`, payload),
   updateSku: (skuId: number, payload: Partial<ProductSKU>) => put<ProductSKU>(`/skus/${skuId}`, payload),
   removeSku: (skuId: number) => del<void>(`/skus/${skuId}`),
@@ -184,6 +200,41 @@ export const levelApi = {
 }
 
 // SPU/SKU endpoints are exposed via `productApi` (see above).
+
+// Price Center — level price rules (等级价格)
+export const levelPriceApi = {
+  list: (q: { level_id?: number; sku_id?: number } = {}) => get<LevelPrice[]>('/level-prices', { params: q }),
+  getDefault: (levelId: number) => get<LevelPrice>(`/level-prices/${levelId}`),
+  upsert: (levelId: number, payload: LevelPriceUpsert) => put<LevelPrice>(`/level-prices/${levelId}`, payload),
+  remove: (levelId: number, q: { sku_id?: number } = {}) => del<void>(`/level-prices/${levelId}`, { params: q }),
+  preview: (levelId: number, q: { sku_id?: number; suggested_price?: number | string } = {}) =>
+    get<LevelPriceRulePreview>(`/level-prices/${levelId}/preview`, { params: q }),
+}
+
+// Price Center — customer fixed SKU prices (专属价格)
+export const customerSkuPriceApi = {
+  list: (q: { customer_id?: number; sku_id?: number } = {}) =>
+    get<CustomerSkuPrice[]>('/customer-sku-prices', { params: q }),
+  upsert: (customerId: number, skuId: number, payload: CustomerSkuPriceUpsert) =>
+    put<CustomerSkuPrice>(`/customer-sku-prices/${customerId}/${skuId}`, payload),
+  remove: (customerId: number, skuId: number) => del<void>(`/customer-sku-prices/${customerId}/${skuId}`),
+  preview: (customerId: number, skuId: number) =>
+    get<CustomerSkuPricePreview>(`/customer-sku-prices/${customerId}/${skuId}/preview`),
+}
+
+// Price Center — channel price books (价格查询)
+export const priceBookApi = {
+  list: (q: { keyword?: string; page?: number; page_size?: number } = {}) => get<PriceBook[]>('/price-books', { params: q }),
+  get: (id: number) => get<PriceBook>(`/price-books/${id}`),
+  create: (payload: PriceBookCreatePayload) => post<PriceBook>('/price-books', payload),
+  update: (id: number, payload: PriceBookUpdatePayload) => put<PriceBook>(`/price-books/${id}`, payload),
+  remove: (id: number) => del<void>(`/price-books/${id}`),
+  items: (q: { keyword?: string; page?: number; page_size?: number } = {}) =>
+    get<PriceBookItem[]>('/price-book-items', { params: q }),
+  createItem: (payload: PriceBookItemCreatePayload) => post<PriceBookItem>('/price-book-items', payload),
+  updateItem: (id: number, payload: PriceBookItemUpdatePayload) => put<PriceBookItem>(`/price-book-items/${id}`, payload),
+  removeItem: (id: number) => del<void>(`/price-book-items/${id}`),
+}
 
 export const uploadApi = {
   image: (file: File | Blob) => {

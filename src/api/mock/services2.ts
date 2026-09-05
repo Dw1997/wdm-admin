@@ -1,7 +1,8 @@
 // src/api/mock/services2.ts - Services for Category, Level, SPU/SKU, AuditLog.
 import dayjs from 'dayjs'
 import {
-  categories, levels, levelPriceRules, spus, skus, auditLogs, roles, features, accounts, adminCustomers, warehouses, warehouseZones, counters2, findCategory,
+  categories, levels, levelPriceRules, spus, skus, auditLogs, roles, features, accounts, adminCustomers, warehouses, warehouseZones,
+  levelPrices, customerSkuPrices, priceBooks, priceBookItems, counters2, findCategory,
 } from './db2'
 import type {
   Category,
@@ -9,6 +10,18 @@ import type {
   LevelCreatePayload,
   LevelUpdatePayload,
   LevelPricePreview,
+  LevelPrice,
+  LevelPriceUpsert,
+  LevelPriceRulePreview,
+  CustomerSkuPrice,
+  CustomerSkuPriceUpsert,
+  CustomerSkuPricePreview,
+  PriceBook,
+  PriceBookCreatePayload,
+  PriceBookUpdatePayload,
+  PriceBookItem,
+  PriceBookItemCreatePayload,
+  PriceBookItemUpdatePayload,
   ProductSPU,
   ProductSKU,
   SkuAttribute,
@@ -611,5 +624,259 @@ export const featureService = {
       return false
     }
     removeNode(features)
+  },
+}
+
+// ===========================================================================
+// Price Center Services
+// ===========================================================================
+function skuSuggestedPrice(sku: ProductSKU): number {
+  const base = Number(sku.cost_price) || 0
+  const value = Number(sku.price_value) || 0
+  const raw = sku.price_method === 'amount' ? base + value : base * (1 + value / 100)
+  return Math.max(raw, 0)
+}
+
+function applyLevelRule(suggested: number, rule: { price_method: string; price_value: string }): number {
+  const value = Number(rule.price_value)
+  const raw = rule.price_method === 'amount' ? suggested + value : suggested * (1 + value / 100)
+  return Math.max(raw, 0)
+}
+
+export const levelPriceService = {
+  async list(q: { level_id?: number; sku_id?: number } = {}): Promise<LevelPrice[]> {
+    await delay()
+    let result = [...levelPrices]
+    if (q.level_id) result = result.filter((r) => r.level_id === q.level_id)
+    if (q.sku_id) result = result.filter((r) => r.sku_id === q.sku_id)
+    return JSON.parse(JSON.stringify(result))
+  },
+  async getDefault(levelId: number): Promise<LevelPrice> {
+    await delay()
+    const rule = levelPrices.find((r) => r.level_id === levelId && r.sku_id === null)
+    if (rule) return JSON.parse(JSON.stringify(rule))
+    const level = levels.find((l) => l.id === levelId)
+    if (!level) throw new Error('等级不存在')
+    return {
+      id: 0, level_id: level.id, level_code: level.level_id, level_nickname: level.nickname,
+      sku_id: null, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null,
+      price_method: 'percent', price_value: '0',
+    }
+  },
+  async upsert(levelId: number, payload: LevelPriceUpsert): Promise<LevelPrice> {
+    await delay()
+    const level = levels.find((l) => l.id === levelId)
+    if (!level) throw new Error('等级不存在')
+    const skuId = payload.sku_id ?? null
+    const ts = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    let rule = levelPrices.find((r) => r.level_id === levelId && (r.sku_id ?? null) === skuId)
+    if (rule) {
+      rule.price_method = payload.price_method
+      rule.price_value = String(payload.price_value)
+      rule.updated_at = ts
+    } else {
+      rule = {
+        id: counters2.levelPrice++, level_id: level.id, level_code: level.level_id, level_nickname: level.nickname,
+        sku_id: skuId, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null,
+        price_method: payload.price_method, price_value: String(payload.price_value), created_at: ts, updated_at: ts,
+      }
+      levelPrices.push(rule)
+    }
+    if (skuId !== null) {
+      const sku = skus.find((s) => s.id === skuId)
+      const spu = sku ? spus.find((s) => s.id === sku.spu_id) : undefined
+      rule.spu_id = sku?.spu_id ?? null
+      rule.spu_name = spu?.name ?? null
+      rule.sku_specs = sku?.specs ?? null
+      rule.sku_remark = sku?.remark ?? null
+    }
+    return JSON.parse(JSON.stringify(rule))
+  },
+  async remove(levelId: number, skuId?: number): Promise<void> {
+    await delay()
+    const idx = levelPrices.findIndex((r) => r.level_id === levelId && (r.sku_id ?? null) === (skuId ?? null))
+    if (idx >= 0) levelPrices.splice(idx, 1)
+  },
+  async preview(levelId: number, q: { sku_id?: number; suggested_price?: number | string } = {}): Promise<LevelPriceRulePreview> {
+    await delay()
+    const level = levels.find((l) => l.id === levelId)
+    if (!level) throw new Error('等级不存在')
+    const sku = q.sku_id ? skus.find((s) => s.id === q.sku_id) : undefined
+    const suggested = q.suggested_price !== undefined && q.suggested_price !== null && q.suggested_price !== ''
+      ? Number(q.suggested_price)
+      : (sku ? skuSuggestedPrice(sku) : 0)
+    const rule = (q.sku_id ? levelPrices.find((r) => r.level_id === levelId && r.sku_id === q.sku_id) : undefined)
+      || levelPrices.find((r) => r.level_id === levelId && r.sku_id === null)
+    if (!rule) {
+      return {
+        level_id: level.id, level_code: level.level_id, level_nickname: level.nickname, sku_id: q.sku_id ?? null,
+        rule_source: 'none', price_method: null, price_value: null,
+        suggested_price: suggested.toFixed(2), level_price: suggested.toFixed(2),
+      }
+    }
+    return {
+      level_id: level.id, level_code: level.level_id, level_nickname: level.nickname, sku_id: q.sku_id ?? null,
+      rule_source: rule.sku_id === null ? 'level' : 'sku',
+      price_method: rule.price_method, price_value: rule.price_value,
+      suggested_price: suggested.toFixed(2), level_price: applyLevelRule(suggested, rule).toFixed(2),
+    }
+  },
+}
+
+export const customerSkuPriceService = {
+  async list(q: { customer_id?: number; sku_id?: number } = {}): Promise<CustomerSkuPrice[]> {
+    await delay()
+    let result = [...customerSkuPrices]
+    if (q.customer_id) result = result.filter((r) => r.customer_id === q.customer_id)
+    if (q.sku_id) result = result.filter((r) => r.sku_id === q.sku_id)
+    return JSON.parse(JSON.stringify(result))
+  },
+  async upsert(customerId: number, skuId: number, payload: CustomerSkuPriceUpsert): Promise<CustomerSkuPrice> {
+    await delay()
+    const customer = adminCustomers.find((c) => c.id === customerId)
+    if (!customer) throw new Error('客户不存在')
+    const sku = skus.find((s) => s.id === skuId)
+    if (!sku) throw new Error('SKU不存在')
+    const spu = spus.find((s) => s.id === sku.spu_id)
+    const ts = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    let rule = customerSkuPrices.find((r) => r.customer_id === customerId && r.sku_id === skuId)
+    if (rule) {
+      rule.price = String(payload.price)
+      rule.updated_by = 0
+      rule.updated_by_name = '系统管理员'
+      rule.updated_at = ts
+    } else {
+      rule = {
+        id: counters2.customerSkuPrice++, customer_id: customerId, customer_name: customer.name,
+        sku_id: sku.id, spu_id: sku.spu_id, spu_name: spu?.name || '', sku_specs: sku.specs || {},
+        sku_remark: sku.remark ?? null, price: String(payload.price),
+        created_by: 0, created_by_name: '系统管理员', updated_by: 0, updated_by_name: '系统管理员',
+        created_at: ts, updated_at: ts,
+      }
+      customerSkuPrices.push(rule)
+    }
+    return JSON.parse(JSON.stringify(rule))
+  },
+  async remove(customerId: number, skuId: number): Promise<void> {
+    await delay()
+    const idx = customerSkuPrices.findIndex((r) => r.customer_id === customerId && r.sku_id === skuId)
+    if (idx >= 0) customerSkuPrices.splice(idx, 1)
+  },
+  async preview(customerId: number, skuId: number): Promise<CustomerSkuPricePreview> {
+    await delay()
+    const sku = skus.find((s) => s.id === skuId)
+    if (!sku) throw new Error('SKU不存在')
+    const customer = adminCustomers.find((c) => c.id === customerId)
+    if (!customer) throw new Error('客户不存在')
+    const suggested = skuSuggestedPrice(sku)
+    let levelPrice = suggested
+    let source: CustomerSkuPricePreview['price_source'] = 'suggested'
+    if (customer.level_id) {
+      const rule = levelPrices.find((r) => r.level_id === customer.level_id && r.sku_id === skuId)
+        || levelPrices.find((r) => r.level_id === customer.level_id && r.sku_id === null)
+      if (rule) {
+        levelPrice = applyLevelRule(suggested, rule)
+        source = rule.sku_id === null ? 'level_default' : 'level_sku'
+      }
+    }
+    const fixed = customerSkuPrices.find((r) => r.customer_id === customerId && r.sku_id === skuId)
+    if (fixed) {
+      return {
+        customer_id: customerId, sku_id: skuId,
+        suggested_price: suggested.toFixed(2), level_price: levelPrice.toFixed(2),
+        final_price: Number(fixed.price).toFixed(2), price_source: 'customer_fixed',
+        customer_sku_price_id: fixed.id,
+      }
+    }
+    return {
+      customer_id: customerId, sku_id: skuId,
+      suggested_price: suggested.toFixed(2), level_price: levelPrice.toFixed(2),
+      final_price: levelPrice.toFixed(2), price_source: source, customer_sku_price_id: null,
+    }
+  },
+}
+
+function paginate<T>(list: T[], q: { page?: number; page_size?: number } = {}): T[] {
+  const page = Math.max(Number(q.page || 1), 1)
+  const pageSize = Math.min(Math.max(Number(q.page_size || 20), 1), 100)
+  return list.slice((page - 1) * pageSize, page * pageSize)
+}
+
+export const priceBookService = {
+  async list(q: { keyword?: string; page?: number; page_size?: number } = {}): Promise<PriceBook[]> {
+    await delay()
+    let result = [...priceBooks]
+    if (q.keyword) {
+      const k = q.keyword.toLowerCase()
+      result = result.filter((b) => b.name.toLowerCase().includes(k))
+    }
+    return JSON.parse(JSON.stringify(paginate(result, q)))
+  },
+  async get(id: number): Promise<PriceBook> {
+    await delay(50)
+    const book = priceBooks.find((b) => b.id === id)
+    if (!book) throw new Error('价格簿不存在')
+    return JSON.parse(JSON.stringify(book))
+  },
+  async create(payload: PriceBookCreatePayload): Promise<PriceBook> {
+    await delay()
+    const ts = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    const book: PriceBook = { id: counters2.priceBook++, ...payload, created_at: ts, updated_at: ts }
+    priceBooks.push(book)
+    return JSON.parse(JSON.stringify(book))
+  },
+  async update(id: number, payload: PriceBookUpdatePayload): Promise<PriceBook> {
+    await delay()
+    const book = priceBooks.find((b) => b.id === id)
+    if (!book) throw new Error('价格簿不存在')
+    if (payload.name !== undefined && payload.name !== null) book.name = payload.name
+    if (payload.channel_type !== undefined && payload.channel_type !== null) book.channel_type = payload.channel_type
+    book.updated_at = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    return JSON.parse(JSON.stringify(book))
+  },
+  async remove(id: number): Promise<void> {
+    await delay()
+    const idx = priceBooks.findIndex((b) => b.id === id)
+    if (idx >= 0) priceBooks.splice(idx, 1)
+    for (let i = priceBookItems.length - 1; i >= 0; i--) {
+      if (priceBookItems[i].book_id === id) priceBookItems.splice(i, 1)
+    }
+  },
+  async listItems(q: { keyword?: string; page?: number; page_size?: number } = {}): Promise<PriceBookItem[]> {
+    await delay()
+    let result = [...priceBookItems]
+    if (q.keyword) {
+      const k = q.keyword.toLowerCase()
+      result = result.filter((it) => {
+        const spu = spus.find((s) => s.id === it.spu_id)
+        return !!spu && (spu.name.toLowerCase().includes(k) || spu.code.toLowerCase().includes(k))
+      })
+    }
+    return JSON.parse(JSON.stringify(paginate(result, q)))
+  },
+  async createItem(payload: PriceBookItemCreatePayload): Promise<PriceBookItem> {
+    await delay()
+    if (!priceBooks.some((b) => b.id === payload.book_id)) throw new Error('价格簿不存在')
+    const ts = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    const item: PriceBookItem = {
+      id: counters2.priceBookItem++, book_id: payload.book_id, spu_id: payload.spu_id,
+      price: String(payload.price), effective_date: payload.effective_date, created_at: ts, updated_at: ts,
+    }
+    priceBookItems.push(item)
+    return JSON.parse(JSON.stringify(item))
+  },
+  async updateItem(id: number, payload: PriceBookItemUpdatePayload): Promise<PriceBookItem> {
+    await delay()
+    const item = priceBookItems.find((it) => it.id === id)
+    if (!item) throw new Error('价格明细不存在')
+    if (payload.price !== undefined && payload.price !== null) item.price = String(payload.price)
+    if (payload.effective_date !== undefined && payload.effective_date !== null) item.effective_date = payload.effective_date
+    item.updated_at = dayjs().format('YYYY-MM-DD HH:mm:ss')
+    return JSON.parse(JSON.stringify(item))
+  },
+  async removeItem(id: number): Promise<void> {
+    await delay()
+    const idx = priceBookItems.findIndex((it) => it.id === id)
+    if (idx >= 0) priceBookItems.splice(idx, 1)
   },
 }

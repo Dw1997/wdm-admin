@@ -1,5 +1,5 @@
 // src/utils/dict.ts - Static dictionary / enum label helpers.
-import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType } from '@/types'
+import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType, PriceMethod, PriceChannelType, PriceSource } from '@/types'
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }> = {
   pending_audit: { label: '待审核', type: 'warning' },
@@ -54,4 +54,27 @@ export const PRICE_STRATEGY_TYPE: Record<PriceStrategyType, { label: string; typ
   customer: { label: '客户专属价', type: 'success', color: '#67C23A' },
   ladder: { label: '阶梯价', type: 'warning', color: '#E6A23C' },
   flash: { label: '限时特价', type: 'danger', color: '#F56C6C' },
+}
+
+export const PRICE_METHOD: Record<PriceMethod, string> = {
+  percent: '百分比 (%)',
+  amount: '固定金额 (元)',
+}
+
+export const PRICE_CHANNEL_TYPE: Record<PriceChannelType, { label: string; type: 'primary' | 'warning' }> = {
+  county_wholesale: { label: '县城批发', type: 'primary' },
+  street_vendor: { label: '游商快批', type: 'warning' },
+}
+
+export const PRICE_SOURCE: Record<PriceSource, { label: string; type: 'success' | 'primary' | 'info' | 'default' }> = {
+  customer_fixed: { label: '客户专属价', type: 'success' },
+  level_sku: { label: '等级SKU价', type: 'primary' },
+  level_default: { label: '等级默认价', type: 'info' },
+  suggested: { label: '建议零售价', type: 'default' },
+}
+
+export const RULE_SOURCE: Record<'sku' | 'level' | 'none', string> = {
+  sku: 'SKU专属规则',
+  level: '等级默认规则',
+  none: '无规则',
 }

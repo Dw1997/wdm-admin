@@ -22,6 +22,9 @@ import {
   accountService,
   adminCustomerService,
   warehouseService,
+  levelPriceService,
+  customerSkuPriceService,
+  priceBookService,
 } from './services2'
 
 type Handler = (config: InternalAxiosRequestConfig) => Promise<unknown> | unknown
@@ -56,7 +59,7 @@ function params(config: InternalAxiosRequestConfig): Record<string, string> {
 
 function buildResponse<T>(config: InternalAxiosRequestConfig, data: T, status = 200): AxiosResponse<T> {
   return {
-    data,
+    data: { code: 200, message: 'success', data },
     status,
     statusText: status === 200 ? 'OK' : 'Created',
     headers: {},
@@ -67,7 +70,7 @@ function buildResponse<T>(config: InternalAxiosRequestConfig, data: T, status = 
 function makeError(config: InternalAxiosRequestConfig, status: number, message: string) {
   const err: any = new Error(message)
   err.config = config
-  err.response = { status, data: { detail: message }, headers: {}, statusText: message, config }
+  err.response = { status, data: { code: status, message, data: null }, headers: {}, statusText: message, config }
   return err
 }
 
@@ -293,6 +296,74 @@ route('GET', '/warehouse-zones', () => warehouseService.listZones())
 route('POST', '/warehouse-zones', (c) => warehouseService.createZone(JSON.parse(c.data || '{}')))
 route('PUT', '/warehouse-zones/:id', (c) => warehouseService.updateZone(Number(extractId(c)), JSON.parse(c.data || '{}')))
 route('DELETE', '/warehouse-zones/:id', (c) => warehouseService.removeZone(Number(extractId(c))))
+
+// -------- Price Center: Level Prices --------
+route('GET', '/level-prices', (c) => {
+  const p = params(c)
+  return levelPriceService.list({
+    level_id: p.level_id ? Number(p.level_id) : undefined,
+    sku_id: p.sku_id ? Number(p.sku_id) : undefined,
+  })
+})
+route('GET', '/level-prices/:id/preview', (c) => {
+  const p = params(c)
+  return levelPriceService.preview(Number(c.url!.split('/').slice(-2, -1)[0]), {
+    sku_id: p.sku_id ? Number(p.sku_id) : undefined,
+    suggested_price: p.suggested_price,
+  })
+})
+route('PUT', '/level-prices/:id', (c) => levelPriceService.upsert(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/level-prices/:id', (c) => {
+  const skuId = params(c).sku_id
+  return levelPriceService.remove(Number(extractId(c)), skuId ? Number(skuId) : undefined)
+})
+route('GET', '/level-prices/:id', (c) => levelPriceService.getDefault(Number(extractId(c))))
+
+// -------- Price Center: Customer SKU Prices --------
+route('GET', '/customer-sku-prices', (c) => {
+  const p = params(c)
+  return customerSkuPriceService.list({
+    customer_id: p.customer_id ? Number(p.customer_id) : undefined,
+    sku_id: p.sku_id ? Number(p.sku_id) : undefined,
+  })
+})
+route('GET', '/customer-sku-prices/:c/:s/preview', (c) => {
+  const segs = (c.url || '').split('/').filter(Boolean)
+  return customerSkuPriceService.preview(Number(segs[segs.length - 3]), Number(segs[segs.length - 2]))
+})
+route('PUT', '/customer-sku-prices/:c/:s', (c) => {
+  const segs = (c.url || '').split('/').filter(Boolean)
+  return customerSkuPriceService.upsert(Number(segs[segs.length - 2]), Number(segs[segs.length - 1]), JSON.parse(c.data || '{}'))
+})
+route('DELETE', '/customer-sku-prices/:c/:s', (c) => {
+  const segs = (c.url || '').split('/').filter(Boolean)
+  return customerSkuPriceService.remove(Number(segs[segs.length - 2]), Number(segs[segs.length - 1]))
+})
+
+// -------- Price Center: Price Books --------
+route('GET', '/price-books', (c) => {
+  const p = params(c)
+  return priceBookService.list({
+    keyword: p.keyword,
+    page: p.page ? Number(p.page) : undefined,
+    page_size: p.page_size ? Number(p.page_size) : undefined,
+  })
+})
+route('POST', '/price-books', (c) => priceBookService.create(JSON.parse(c.data || '{}')))
+route('GET', '/price-books/:id', (c) => priceBookService.get(Number(extractId(c))))
+route('PUT', '/price-books/:id', (c) => priceBookService.update(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/price-books/:id', (c) => priceBookService.remove(Number(extractId(c))))
+route('GET', '/price-book-items', (c) => {
+  const p = params(c)
+  return priceBookService.listItems({
+    keyword: p.keyword,
+    page: p.page ? Number(p.page) : undefined,
+    page_size: p.page_size ? Number(p.page_size) : undefined,
+  })
+})
+route('POST', '/price-book-items', (c) => priceBookService.createItem(JSON.parse(c.data || '{}')))
+route('PUT', '/price-book-items/:id', (c) => priceBookService.updateItem(Number(extractId(c)), JSON.parse(c.data || '{}')))
+route('DELETE', '/price-book-items/:id', (c) => priceBookService.removeItem(Number(extractId(c))))
 
 // -------- Adapter --------
 export const mockAdapter: AxiosAdapter = (config) => {

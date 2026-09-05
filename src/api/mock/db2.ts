@@ -13,6 +13,10 @@ import type {
   Warehouse,
   WarehouseZone,
   RegionNode,
+  LevelPrice,
+  CustomerSkuPrice,
+  PriceBook,
+  PriceBookItem,
 } from '@/types'
 
 const now = () => dayjs().format('YYYY-MM-DD HH:mm:ss')
@@ -345,6 +349,36 @@ export const warehouseZones: WarehouseZone[] = [
   { id: 3, warehouse_id: 2, name: '退货暂存区', created_at: now(), updated_at: now() },
 ]
 
+// ---------------------------------------------------------------------------
+// Price Center: level prices / customer SKU prices / price books
+// ---------------------------------------------------------------------------
+export const levelPrices: LevelPrice[] = [
+  { id: 1, level_id: 1, level_code: 'retail', level_nickname: '零售客户', sku_id: null, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null, price_method: 'percent', price_value: '0', created_at: now(), updated_at: now() },
+  { id: 2, level_id: 2, level_code: 'bronze', level_nickname: '青铜批发', sku_id: null, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null, price_method: 'percent', price_value: '-3', created_at: now(), updated_at: now() },
+  { id: 3, level_id: 3, level_code: 'silver', level_nickname: '白银批发', sku_id: null, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null, price_method: 'percent', price_value: '-5', created_at: now(), updated_at: now() },
+  { id: 4, level_id: 4, level_code: 'gold', level_nickname: '黄金批发', sku_id: null, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null, price_method: 'percent', price_value: '-10', created_at: now(), updated_at: now() },
+  { id: 5, level_id: 5, level_code: 'vip', level_nickname: 'VIP批发', sku_id: null, spu_id: null, spu_name: null, sku_specs: null, sku_remark: null, price_method: 'percent', price_value: '-15', created_at: now(), updated_at: now() },
+  { id: 6, level_id: 4, level_code: 'gold', level_nickname: '黄金批发', sku_id: 2, spu_id: 2, spu_name: '农夫山泉 550ml', sku_specs: { 规格: '550ml' }, sku_remark: '550ml/瓶', price_method: 'percent', price_value: '-8', created_at: now(), updated_at: now() },
+  { id: 7, level_id: 5, level_code: 'vip', level_nickname: 'VIP批发', sku_id: 1, spu_id: 1, spu_name: '乐事薯片（原味）70g', sku_specs: { 规格: '70g' }, sku_remark: '70g/包', price_method: 'amount', price_value: '-0.5', created_at: now(), updated_at: now() },
+]
+
+export const customerSkuPrices: CustomerSkuPrice[] = [
+  { id: 1, customer_id: 1, customer_name: '陈记副食', sku_id: 1, spu_id: 1, spu_name: '乐事薯片（原味）70g', sku_specs: { 规格: '70g' }, sku_remark: '70g/包', price: '3.20', created_by: 0, created_by_name: '系统管理员', updated_by: 0, updated_by_name: '系统管理员', created_at: now(), updated_at: now() },
+  { id: 2, customer_id: 1, customer_name: '陈记副食', sku_id: 3, spu_id: 3, spu_name: '双汇火腿肠 30g', sku_specs: { 规格: '30g' }, sku_remark: '30g/根', price: '1.40', created_by: 0, created_by_name: '系统管理员', updated_by: 0, updated_by_name: '系统管理员', created_at: now(), updated_at: now() },
+  { id: 3, customer_id: 2, customer_name: '赵氏百货', sku_id: 2, spu_id: 2, spu_name: '农夫山泉 550ml', sku_specs: { 规格: '550ml' }, sku_remark: '550ml/瓶', price: '2.20', created_by: 1, created_by_name: '张推广', updated_by: 1, updated_by_name: '张推广', created_at: now(), updated_at: now() },
+]
+
+export const priceBooks: PriceBook[] = [
+  { id: 1, name: '县城批发标准价', channel_type: 'county_wholesale', created_at: now(), updated_at: now() },
+  { id: 2, name: '游商快批价', channel_type: 'street_vendor', created_at: now(), updated_at: now() },
+]
+
+export const priceBookItems: PriceBookItem[] = [
+  { id: 1, book_id: 1, spu_id: 1, price: '3.50', effective_date: '2026-01-01', created_at: now(), updated_at: now() },
+  { id: 2, book_id: 1, spu_id: 2, price: '2.30', effective_date: '2026-01-01', created_at: now(), updated_at: now() },
+  { id: 3, book_id: 2, spu_id: 3, price: '1.60', effective_date: '2026-02-01', created_at: now(), updated_at: now() },
+]
+
 // ID counters
 export const counters2 = {
   category: 21,
@@ -358,4 +392,8 @@ export const counters2 = {
   adminCustomer: 4,
   warehouse: 4,
   warehouseZone: 4,
+  levelPrice: 8,
+  customerSkuPrice: 4,
+  priceBook: 3,
+  priceBookItem: 4,
 }

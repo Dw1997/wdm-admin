@@ -21,7 +21,7 @@ There is no test framework. For UI changes, run `npm run dev` and exercise the a
 The app has one HTTP entrypoint. Views import **only** from `@/api` (the facade in `src/api/index.ts`), which groups backend resources into typed objects (`productApi`, `orderApi`, `financeApi`, etc.). The facade calls the thin wrappers in `src/api/http.ts` (`get`/`post`/`put`/`del`), which wrap a single shared Axios instance.
 
 Two things in `http.ts` are easy to miss:
-1. **The response interceptor unwraps `resp.data`** — so facade methods receive the JSON payload directly, never an `AxiosResponse`. Typed wrappers (`get<T, T>`) enforce this at the call site.
+1. **The response interceptor unwraps the `{code, message, data}` envelope** — the backend (`wdm-backend/app/core/response.py` middleware) wraps every `/api/v1` JSON response in `{code, message, data}` (`code: 200` on success; errors keep HTTP 4xx/5xx with `code` = HTTP status). The interceptor returns the inner `data` field, so facade methods receive the payload directly, never the envelope or an `AxiosResponse`. Typed wrappers (`get<T, T>`) enforce this at the call site. The mock adapter emits the same envelope (`buildResponse` in `adapter.ts`).
 2. **Mock mode swaps the Axios adapter**, not the base URL. When `VITE_API_BASE_URL` is empty, `http.defaults.adapter` is replaced by `mockAdapter` (`src/api/mock/adapter.ts`), an in-memory router that pattern-matches method+path against `services.ts`/`services2.ts`. This means the entire app — interceptors, auth headers, error handling — runs identically in mock and real mode; only the transport differs. The default `baseURL` is `/api/v1`.
 
 ### Mock layer split

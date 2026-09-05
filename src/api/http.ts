@@ -28,7 +28,14 @@ http.interceptors.request.use((config) => {
 })
 
 http.interceptors.response.use(
-  (resp) => resp.data,
+  (resp) => {
+    // Backend wraps every /api/v1 JSON response in {code, message, data}; unwrap to data.
+    const body = resp.data as Record<string, unknown> | null | undefined
+    if (body && typeof body === 'object' && typeof body.code === 'number' && 'data' in body) {
+      return body.data
+    }
+    return resp.data
+  },
   (error) => {
     const status = error?.response?.status
     const detail = error?.response?.data?.detail || error?.response?.data?.message || error.message

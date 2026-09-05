@@ -71,19 +71,19 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'levels',
         name: 'prices-levels',
-        component: () => import('@/views/prices/PriceModulePlaceholderPage.vue'),
+        component: () => import('@/views/prices/PriceLevelPage.vue'),
         meta: { title: '等级价格' },
       },
       {
         path: 'exclusive',
         name: 'prices-exclusive',
-        component: () => import('@/views/prices/PriceModulePlaceholderPage.vue'),
+        component: () => import('@/views/prices/CustomerSkuPricePage.vue'),
         meta: { title: '专属价格' },
       },
       {
         path: 'query',
         name: 'prices-query',
-        component: () => import('@/views/prices/PriceModulePlaceholderPage.vue'),
+        component: () => import('@/views/prices/PriceQueryPage.vue'),
         meta: { title: '价格查询' },
       },
     ],
