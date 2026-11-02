@@ -112,19 +112,6 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/common/PlaceholderPage.vue'),
         meta: { title: '供应商往来' },
       },
-      // 新建、编辑供应商不挂菜单，从供应商列表页进入，共用一份表单
-      {
-        path: 'create',
-        name: 'suppliers-create',
-        component: () => import('@/views/suppliers/VendorFormPage.vue'),
-        meta: { title: '新建供应商' },
-      },
-      {
-        path: 'edit/:id',
-        name: 'suppliers-edit',
-        component: () => import('@/views/suppliers/VendorFormPage.vue'),
-        meta: { title: '编辑供应商' },
-      },
     ],
   },
   {

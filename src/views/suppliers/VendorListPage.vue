@@ -3,7 +3,7 @@
     <div class="card-section">
       <div class="page-header">
         <h2 class="page-title">供应商列表</h2>
-        <n-button type="primary" @click="router.push('/suppliers/create')">新建供应商</n-button>
+        <n-button type="primary" @click="openForm(null)">新建供应商</n-button>
       </div>
 
       <n-space style="margin-bottom: 16px" :size="12">
@@ -48,19 +48,20 @@
         :pagination="pagination"
       />
     </div>
+
+    <VendorFormModal v-model:show="formVisible" :vendor-id="editingId" @saved="load" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { h, ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { NButton, NPopconfirm, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { vendorApi } from '@/api'
 import { VENDOR_STATUS_OPTIONS, VENDOR_TYPE_OPTIONS, vendorStatusMeta, vendorTypeLabel } from '@/utils/dict'
 import { formatDate } from '@/utils/format'
 import type { PageResult, Vendor } from '@/types'
+import VendorFormModal from './VendorFormModal.vue'
 
-const router = useRouter()
 const message = useMessage()
 
 const loading = ref(false)
@@ -118,8 +119,16 @@ const columns = computed<DataTableColumns<Vendor>>(() => [
   },
 ])
 
+const formVisible = ref(false)
+const editingId = ref<number | null>(null)
+
+function openForm(id: number | null) {
+  editingId.value = id
+  formVisible.value = true
+}
+
 function openEdit(r: Vendor) {
-  router.push(`/suppliers/edit/${r.id}`)
+  openForm(r.id)
 }
 
 async function load() {

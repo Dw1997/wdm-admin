@@ -230,11 +230,7 @@ const activeKey = computed(() => {
     return p
   }
   if (p.startsWith('/prices')) return p === '/prices' ? '/prices/suggested' : p
-  if (p.startsWith('/suppliers')) {
-    // 新建、编辑供应商页不挂菜单，高亮供应商列表
-    if (p === '/suppliers' || p === '/suppliers/create' || p.startsWith('/suppliers/edit')) return '/suppliers/list'
-    return p
-  }
+  if (p.startsWith('/suppliers')) return p === '/suppliers' ? '/suppliers/list' : p
   if (p.startsWith('/customers')) return p === '/customers' ? '/customers/list' : p
   if (p.startsWith('/logistics')) return p === '/logistics' ? '/logistics/list' : p
   if (p.startsWith('/sales')) return p === '/sales' ? '/sales/list' : p
