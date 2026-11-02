@@ -9,58 +9,78 @@
     </div>
 
     <n-spin :show="loading">
-      <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="96" style="max-width: 760px">
+      <n-form ref="formRef" :model="form" :rules="rules" label-placement="left" label-width="84" class="vendor-form">
         <div class="card-section">
           <h3 class="section-title">基本信息</h3>
-          <n-form-item label="供应商名称" path="name">
-            <n-input v-model:value="form.name" maxlength="100" placeholder="请输入供应商名称" />
-          </n-form-item>
-          <n-form-item label="类型" path="type">
-            <n-radio-group v-model:value="form.type">
-              <n-radio-button v-for="o in typeOpts" :key="o.value" :value="o.value">{{ o.label }}</n-radio-button>
-            </n-radio-group>
-          </n-form-item>
-          <n-form-item label="手机号" path="phone">
-            <n-input ref="phoneRef" v-model:value="form.phone" maxlength="11" placeholder="选填，供应商登录小程序时按它匹配，全局唯一" />
-          </n-form-item>
-          <n-form-item label="状态" path="status">
-            <n-select v-model:value="form.status" :options="statusOpts" style="width: 200px" />
-          </n-form-item>
-          <n-form-item v-if="isEdit" label="微信绑定">
-            <n-tag size="small" :type="original?.wechat_bound ? 'success' : 'default'">
-              {{ original?.wechat_bound ? '已绑定' : '未绑定' }}
-            </n-tag>
-          </n-form-item>
+          <n-grid :cols="2" :x-gap="32">
+            <n-gi :span="2">
+              <n-form-item label="供应商名称" path="name">
+                <n-input v-model:value="form.name" maxlength="100" placeholder="请输入供应商名称" />
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="类型" path="type">
+                <n-radio-group v-model:value="form.type">
+                  <n-radio-button v-for="o in typeOpts" :key="o.value" :value="o.value">{{ o.label }}</n-radio-button>
+                </n-radio-group>
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="状态" path="status">
+                <n-select v-model:value="form.status" :options="statusOpts" />
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="手机号" path="phone">
+                <n-input ref="phoneRef" v-model:value="form.phone" maxlength="11" placeholder="选填，全局唯一" />
+              </n-form-item>
+            </n-gi>
+            <n-gi v-if="isEdit">
+              <n-form-item label="微信绑定" :show-feedback="false">
+                <n-tag size="small" :type="original?.wechat_bound ? 'success' : 'default'">
+                  {{ original?.wechat_bound ? '已绑定' : '未绑定' }}
+                </n-tag>
+              </n-form-item>
+            </n-gi>
+          </n-grid>
+          <div class="hint">手机号用于供应商登录小程序时匹配身份。</div>
         </div>
 
         <div class="card-section">
-          <h3 class="section-title">联系人</h3>
-          <n-form-item label="联系人" path="contact_name">
-            <n-input v-model:value="form.contact_name" maxlength="50" placeholder="选填" />
-          </n-form-item>
-          <n-form-item label="联系电话" path="contact_phone">
-            <n-input v-model:value="form.contact_phone" maxlength="20" placeholder="选填" />
-          </n-form-item>
-        </div>
-
-        <div class="card-section">
-          <h3 class="section-title">地址</h3>
-          <n-form-item label="省 / 市 / 区">
-            <n-cascader
-              v-model:value="regionValue"
-              :options="regionCascaderOptions"
-              clearable
-              placeholder="请选择省市区"
-              style="width: 100%"
-              @update:value="applyRegion"
-            />
-          </n-form-item>
-          <n-form-item label="镇 / 市场" path="town">
-            <n-input v-model:value="form.town" maxlength="100" placeholder="选填" />
-          </n-form-item>
-          <n-form-item label="详细地址" path="detail_address">
-            <n-input v-model:value="form.detail_address" maxlength="255" placeholder="选填" />
-          </n-form-item>
+          <h3 class="section-title">联系人与地址</h3>
+          <n-grid :cols="2" :x-gap="32">
+            <n-gi>
+              <n-form-item label="联系人" path="contact_name">
+                <n-input v-model:value="form.contact_name" maxlength="50" placeholder="选填" />
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="联系电话" path="contact_phone">
+                <n-input v-model:value="form.contact_phone" maxlength="20" placeholder="选填" />
+              </n-form-item>
+            </n-gi>
+            <n-gi :span="2">
+              <n-form-item label="省 / 市 / 区" :show-feedback="false" class="tight">
+                <n-cascader
+                  v-model:value="regionValue"
+                  :options="regionCascaderOptions"
+                  clearable
+                  placeholder="请选择省市区"
+                  @update:value="applyRegion"
+                />
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="镇 / 市场" path="town">
+                <n-input v-model:value="form.town" maxlength="100" placeholder="选填" />
+              </n-form-item>
+            </n-gi>
+            <n-gi>
+              <n-form-item label="详细地址" path="detail_address">
+                <n-input v-model:value="form.detail_address" maxlength="255" placeholder="选填" />
+              </n-form-item>
+            </n-gi>
+          </n-grid>
         </div>
 
         <div v-if="isEdit && original" class="meta">
@@ -238,7 +258,7 @@ async function onSave() {
         message.success('保存成功')
       } else {
         await vendorApi.create(payload)
-        snapshot = JSON.stringify(form)
+        allowLeave = true
         message.success('创建成功')
         router.push('/suppliers/list')
       }
@@ -262,24 +282,36 @@ async function onSave() {
   }
 }
 
-onBeforeRouteLeave(() => {
-  if (!isDirty()) return true
-  return new Promise<boolean>((resolve) => {
-    dialog.warning({
-      title: '有未保存的修改',
-      content: '离开后修改的内容将丢失，确认离开？',
-      positiveText: '离开',
-      negativeText: '留下',
-      onPositiveClick: () => resolve(true),
-      onNegativeClick: () => resolve(false),
-      onClose: () => resolve(false),
-    })
+// 有未保存修改时拦截离开：先取消本次跳转，确认后放行标志置位再重新跳转（避免挂起的导航被后续跳转取消）
+let allowLeave = false
+let confirming = false
+onBeforeRouteLeave((to) => {
+  if (allowLeave || !isDirty()) return true
+  if (confirming) return false
+  confirming = true
+  dialog.warning({
+    title: '有未保存的修改',
+    content: '离开后修改的内容将丢失，确认离开？',
+    positiveText: '离开',
+    negativeText: '留下',
+    onPositiveClick: () => {
+      confirming = false
+      allowLeave = true
+      router.push(to.fullPath)
+    },
+    onNegativeClick: () => { confirming = false },
+    onClose: () => { confirming = false },
+    onMaskClick: () => { confirming = false },
   })
+  return false
 })
 </script>
 
 <style scoped>
+.vendor-form { max-width: 880px; }
 .header-actions { display: flex; gap: 8px; }
 .section-title { margin: 0 0 16px; font-size: 15px; font-weight: 600; }
+.hint { margin: -4px 0 0 84px; color: #909399; font-size: 12px; }
 .meta { color: #909399; font-size: 12px; padding: 0 4px; }
+.vendor-form :deep(.card-section) { margin-bottom: 16px; }
 </style>
