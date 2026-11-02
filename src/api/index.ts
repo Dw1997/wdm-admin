@@ -1,6 +1,8 @@
 // src/api/index.ts - Public API facade (one module per backend resource).
 import { get, post, put, del } from './http'
 import type {
+  Vendor,
+  VendorPayload,
   UserInfo,
   TokenResponse,
   Customer,
@@ -86,6 +88,16 @@ export const productApi = {
   removeSku: (skuId: number) => del<void>(`/skus/${skuId}`),
   generateSkus: (spuId: number, payload: { attributes: SkuAttribute[]; overwrite?: boolean }) =>
     post<ProductSKU[]>(`/spus/${spuId}/skus/generate`, payload),
+}
+
+// Vendors (供应商) — vendors.md；列表为分页信封，下拉选项用 fetchAllPages 拉全量
+export const vendorApi = {
+  list: (q: { keyword?: string; type?: string; status?: string; page?: number; page_size?: number } = {}) =>
+    get<Vendor[] | PageResult<Vendor>>('/vendors', { params: q }),
+  get: (id: number) => get<Vendor>(`/vendors/${id}`),
+  create: (payload: VendorPayload) => post<Vendor>('/vendors', payload),
+  update: (id: number, payload: VendorPayload) => put<Vendor>(`/vendors/${id}`, payload),
+  remove: (id: number) => del<void>(`/vendors/${id}`),
 }
 
 // Customers

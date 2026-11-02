@@ -95,22 +95,35 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '供应商', icon: 'BuildingFactory' },
     children: [
       {
-        path: 'create',
-        name: 'suppliers-create',
+        path: 'dashboard',
+        name: 'suppliers-dashboard',
         component: () => import('@/views/common/PlaceholderPage.vue'),
-        meta: { title: '新建供应商' },
+        meta: { title: '供应商看板' },
       },
       {
         path: 'list',
         name: 'suppliers-list',
-        component: () => import('@/views/common/PlaceholderPage.vue'),
+        component: () => import('@/views/suppliers/VendorListPage.vue'),
         meta: { title: '供应商列表' },
       },
       {
-        path: 'debt',
-        name: 'suppliers-debt',
+        path: 'transactions',
+        name: 'suppliers-transactions',
         component: () => import('@/views/common/PlaceholderPage.vue'),
-        meta: { title: '供应商欠款' },
+        meta: { title: '供应商往来' },
+      },
+      // 新建、编辑供应商不挂菜单，从供应商列表页进入，共用一份表单
+      {
+        path: 'create',
+        name: 'suppliers-create',
+        component: () => import('@/views/suppliers/VendorFormPage.vue'),
+        meta: { title: '新建供应商' },
+      },
+      {
+        path: 'edit/:id',
+        name: 'suppliers-edit',
+        component: () => import('@/views/suppliers/VendorFormPage.vue'),
+        meta: { title: '编辑供应商' },
       },
     ],
   },

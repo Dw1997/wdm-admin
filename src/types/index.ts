@@ -718,3 +718,28 @@ export interface AccountPasswordUpdate {
   new_password: string
   old_password?: string | null
 }
+
+// ---------- Vendor (供应商) ----------
+export type VendorType = 'market' | 'origin' | 'manufacturer'
+export type VendorStatus = 'active' | 'order_disabled' | 'login_disabled'
+
+export interface Vendor {
+  id: number
+  name: string
+  type: VendorType
+  phone: string | null
+  contact_name: string | null
+  contact_phone: string | null
+  status: VendorStatus
+  province: string | null
+  city: string | null
+  district: string | null
+  town: string | null
+  detail_address: string | null
+  wechat_bound: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** POST /vendors、PUT /vendors/{id} 载荷（PUT 只传改过的字段，清空可空字段传 null） */
+export type VendorPayload = Partial<Omit<Vendor, 'id' | 'wechat_bound' | 'created_at' | 'updated_at'>>

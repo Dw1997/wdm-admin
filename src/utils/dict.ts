@@ -1,5 +1,5 @@
 // src/utils/dict.ts - Static dictionary / enum label helpers.
-import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType, PriceMethod, PriceChannelType, PriceSource } from '@/types'
+import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType, PriceMethod, PriceChannelType, PriceSource, VendorType, VendorStatus } from '@/types'
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }> = {
   pending_audit: { label: '待审核', type: 'warning' },
@@ -78,3 +78,20 @@ export const RULE_SOURCE: Record<'sku' | 'level' | 'none', string> = {
   level: '等级默认规则',
   none: '无规则',
 }
+
+// ---------- 供应商 ----------
+export const VENDOR_TYPE: Record<VendorType, string> = {
+  market: '市场店家',
+  origin: '产地',
+  manufacturer: '厂家',
+}
+export const VENDOR_TYPE_OPTIONS = (Object.keys(VENDOR_TYPE) as VendorType[]).map((value) => ({ label: VENDOR_TYPE[value], value }))
+export const vendorTypeLabel = (t: string) => VENDOR_TYPE[t as VendorType] || t
+
+export const VENDOR_STATUS: Record<VendorStatus, { label: string; type: 'success' | 'warning' | 'error' }> = {
+  active: { label: '正常', type: 'success' },
+  order_disabled: { label: '禁止下单', type: 'warning' },
+  login_disabled: { label: '禁止登录', type: 'error' },
+}
+export const VENDOR_STATUS_OPTIONS = (Object.keys(VENDOR_STATUS) as VendorStatus[]).map((value) => ({ label: VENDOR_STATUS[value].label, value }))
+export const vendorStatusMeta = (s: string) => VENDOR_STATUS[s as VendorStatus] || { label: s, type: 'error' as const }
