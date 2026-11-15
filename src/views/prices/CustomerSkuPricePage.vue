@@ -36,10 +36,26 @@
           <n-select v-model:value="form.customer_id" :options="customerOptions" filterable placeholder="选择客户" />
         </n-form-item>
         <n-form-item label="商品">
-          <n-select v-model:value="form.spu_id" :options="spuOptions" filterable placeholder="选择商品" @update:value="form.sku_id = null" />
+          <n-select
+            v-model:value="form.spu_id"
+            :options="spuOptions"
+            :loading="spuLoading"
+            filterable
+            remote
+            clearable
+            placeholder="输入名称搜索商品"
+            @search="searchSpus"
+            @update:value="onSpuChange"
+          />
         </n-form-item>
         <n-form-item label="SKU">
-          <n-select v-model:value="form.sku_id" :options="skuOptionsFor(form.spu_id)" placeholder="选择 SKU" />
+          <n-select v-model:value="form.sku_id" :options="skuOptions" :loading="skuLoading" placeholder="选择 SKU" />
+        </n-form-item>
+        <n-form-item v-if="selectedSku" label="成本价 (元)">
+          <span>¥{{ Number(selectedSku.cost_price || 0).toFixed(2) }}</span>
+        </n-form-item>
+        <n-form-item v-if="selectedSku" label="默认售价 (元)">
+          <span style="color: #ea580c; font-weight: 600">¥{{ calcSuggestedPrice(selectedSku).toFixed(2) }}</span>
         </n-form-item>
         <n-form-item label="专属价 (元)">
           <n-input-number v-model:value="form.price" :precision="2" :min="0" style="width: 100%" />
@@ -65,7 +81,7 @@
           <n-descriptions-item label="建议零售价">¥{{ previewResult.suggested_price }}</n-descriptions-item>
           <n-descriptions-item label="等级价格">¥{{ previewResult.level_price }}</n-descriptions-item>
           <n-descriptions-item label="最终成交价">
-            <span style="color: #dc2626; font-weight: 600">¥{{ previewResult.final_price }}</span>
+            <span style="color: var(--primary); font-weight: 600">¥{{ previewResult.final_price }}</span>
           </n-descriptions-item>
         </n-descriptions>
       </n-spin>
@@ -79,10 +95,10 @@ import {
   NButton, NInputNumber, NSelect, NDataTable, useMessage, useDialog,
   type DataTableColumns,
 } from 'naive-ui'
-import { adminCustomerApi, customerSkuPriceApi, productApi } from '@/api'
-import { formatDate } from '@/utils/format'
+import { adminCustomerApi, customerSkuPriceApi, productApi, fetchAllPages, PAGE_SIZE } from '@/api'
+import { formatDate, calcSuggestedPrice } from '@/utils/format'
 import { PRICE_SOURCE } from '@/utils/dict'
-import type { AdminCustomer, CustomerSkuPrice, CustomerSkuPricePreview, ProductSPU, ProductSKU } from '@/types'
+import type { AdminCustomer, CustomerSkuPrice, CustomerSkuPricePreview, ProductSKU } from '@/types'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -91,7 +107,6 @@ const saving = ref(false)
 const previewing = ref(false)
 
 const customers = ref<AdminCustomer[]>([])
-const spus = ref<ProductSPU[]>([])
 const skus = ref<ProductSKU[]>([])
 const prices = ref<CustomerSkuPrice[]>([])
 const filterCustomerId = ref<number | null>(null)
@@ -99,17 +114,42 @@ const filterCustomerId = ref<number | null>(null)
 const customerOptions = ref<{ label: string; value: number }[]>([])
 const spuOptions = ref<{ label: string; value: number }[]>([])
 
-function skuOptionsFor(spuId: number | null) {
-  if (!spuId) return []
-  return skus.value
-    .filter((s) => s.spu_id === spuId)
-    .map((s) => ({ label: skuLabel(s), value: s.id }))
+// 商品/SKU 不再整表预加载：商品按关键字远程搜索，SKU 选中商品后再取
+const skuOptions = computed(() =>
+  skus.value.map((s) => ({
+    label: (s.specs ? Object.values(s.specs).filter(Boolean).join('/') : s.remark || '') || `SKU ${s.id}`,
+    value: s.id,
+  })),
+)
+const spuLoading = ref(false)
+const skuLoading = ref(false)
+let searchTimer: ReturnType<typeof setTimeout> | undefined
+
+async function loadSpus(keyword = '') {
+  spuLoading.value = true
+  try {
+    const list = await productApi.spus({ keyword: keyword || undefined, page: 1, page_size: PAGE_SIZE })
+    spuOptions.value = list.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))
+  } finally {
+    spuLoading.value = false
+  }
 }
 
-function skuLabel(sku: ProductSKU): string {
-  const spu = spus.value.find((s) => s.id === sku.spu_id)
-  const spec = sku.specs ? Object.values(sku.specs).filter(Boolean).join('/') : sku.remark || ''
-  return `${spu?.name || 'SKU'} ${spec}`.trim()
+function searchSpus(keyword: string) {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => loadSpus(keyword.trim()), 300)
+}
+
+async function onSpuChange(spuId: number | null) {
+  form.value.sku_id = null
+  skus.value = []
+  if (!spuId) return
+  skuLoading.value = true
+  try {
+    skus.value = await productApi.skus(spuId)
+  } finally {
+    skuLoading.value = false
+  }
 }
 
 function specsText(r: CustomerSkuPrice): string {
@@ -155,11 +195,15 @@ const columns = computed<DataTableColumns<CustomerSkuPrice>>(() => [
 const showCreate = ref(false)
 const form = ref({ customer_id: null as number | null, spu_id: null as number | null, sku_id: null as number | null, price: 0 })
 
+const selectedSku = computed(() => skus.value.find((s) => s.id === form.value.sku_id) ?? null)
+
 const showPreview = ref(false)
 const previewResult = ref<CustomerSkuPricePreview | null>(null)
 
 function openCreate() {
   form.value = { customer_id: filterCustomerId.value, spu_id: null, sku_id: null, price: 0 }
+  skus.value = []
+  loadSpus()
   showCreate.value = true
 }
 
@@ -218,16 +262,10 @@ async function saveCreate() {
 onMounted(async () => {
   loading.value = true
   try {
-    const [customerList, spuList, skuList] = await Promise.all([
-      adminCustomerApi.list({ page_size: 100 }),
-      productApi.spus(),
-      productApi.allSkus({ page_size: 100 }),
-    ])
+    // 客户下拉需全量选项；商品/SKU 改为按需加载，避免进页面就拉几十页
+    const customerList = await fetchAllPages((p) => adminCustomerApi.list({ page: p, page_size: PAGE_SIZE }))
     customers.value = customerList
-    spus.value = spuList
-    skus.value = skuList
     customerOptions.value = customerList.map((c) => ({ label: c.name, value: c.id }))
-    spuOptions.value = spuList.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))
     await loadPrices()
   } finally {
     loading.value = false

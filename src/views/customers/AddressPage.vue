@@ -43,7 +43,7 @@ const columns = computed<DataTableColumns<AdminCustomer>>(() => [
   { title: 'ID', key: 'id', width: 60 },
   { title: '客户名称', key: 'name', width: 140 },
   { title: '手机号', key: 'phone', width: 140 },
-  { title: '收货地址', key: 'address', ellipsis: { tooltip: true }, render: (r) => r.address || h('span', { style: 'color:#909399' }, '未填写') },
+  { title: '收货地址', key: 'address', ellipsis: { tooltip: true }, render: (r) => r.address || h('span', { style: 'color:var(--text-3)' }, '未填写') },
   { title: '操作', key: 'actions', width: 150, render: (r) => h('div', [
     h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑地址' }),
     r.address ? h(NPopconfirm, { onPositiveClick: () => onClear(r) }, {

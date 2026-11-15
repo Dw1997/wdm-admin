@@ -28,6 +28,12 @@
             <n-radio-button value="wholesale">批发</n-radio-button>
           </n-radio-group>
         </n-form-item>
+        <n-form-item label="默认额度">
+          <n-input-number v-model:value="form.default_credit_limit" :min="0" :step="1000" style="width: 200px">
+            <template #suffix>元</template>
+          </n-input-number>
+          <span style="margin-left: 8px; color: #999">该等级客户未单独设置额度时按此额度；销售私有等级只能 1000 / 3000 / 5000</span>
+        </n-form-item>
         <n-form-item label="描述">
           <n-input v-model:value="form.description" type="textarea" :rows="2" placeholder="选填" />
         </n-form-item>
@@ -68,6 +74,7 @@ const form = reactive<any>({
   nickname: '',
   type: 'wholesale',
   description: '',
+  default_credit_limit: 1000,
   is_active: true,
 })
 
@@ -88,6 +95,7 @@ const columns = computed<DataTableColumns<LevelConfig>>(() => [
     render: (r) => h(NTag, { size: 'small', type: r.is_system ? 'primary' : 'warning' }, { default: () => (r.is_system ? '系统管理员' : '销售') }),
   },
   { title: '客户数', key: 'customer_count', width: '8%', render: (r) => r.customer_count ?? 0 },
+  { title: '默认额度', key: 'default_credit_limit', width: '10%', render: (r) => r.default_credit_limit != null ? `¥${Number(r.default_credit_limit).toLocaleString()}` : '—' },
   { title: '描述', key: 'description', ellipsis: { tooltip: true }, render: (r) => r.description || '—' },
   {
     title: '状态', key: 'is_active', width: '8%',
@@ -121,6 +129,7 @@ function openCreate() {
     nickname: '',
     type: 'wholesale',
     description: '',
+    default_credit_limit: 1000,
     is_active: true,
   })
   editVisible.value = true
@@ -133,6 +142,7 @@ function openEdit(row: LevelConfig) {
     nickname: row.nickname,
     type: row.type,
     description: row.description || '',
+    default_credit_limit: Number(row.default_credit_limit ?? 1000),
     is_active: row.is_active,
   })
   editVisible.value = true
@@ -154,6 +164,7 @@ async function onSave() {
     nickname,
     type: form.type,
     description: form.description || null,
+    default_credit_limit: form.default_credit_limit ?? 1000,
     is_active: form.is_active,
   }
 

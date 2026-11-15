@@ -44,7 +44,7 @@ const usagePercent = computed(() => {
 const creditCards = computed(() => {
   if (!credit.value) return []
   return [
-    { label: '授信总额度', value: `¥${formatQty(credit.value.credit_limit)}`, color: 'linear-gradient(135deg,#dc2626,#ef4444)', icon: '💳' },
+    { label: '授信总额度', value: `¥${formatQty(credit.value.credit_limit)}`, color: 'linear-gradient(135deg,#4f46e5,#818cf8)', icon: '💳' },
     { label: '已用欠款', value: `¥${formatQty(credit.value.used_credit)}`, color: 'linear-gradient(135deg,#ea580c,#f59e0b)', icon: '💰', danger: true },
     { label: '可用额度', value: `¥${formatQty(credit.value.available_credit)}`, color: 'linear-gradient(135deg,#16a34a,#22c55e)', icon: '✅', success: credit.value.available_credit >= credit.value.credit_limit * 0.2 },
     { label: '使用率', value: `${usagePercent.value}%`, color: 'linear-gradient(135deg,#7c3aed,#a855f7)', icon: '📊' },

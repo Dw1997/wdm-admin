@@ -86,7 +86,7 @@ import {
   NButton, NInput, NInputNumber, NSelect, NDataTable, NTag, useMessage, useDialog,
   type DataTableColumns,
 } from 'naive-ui'
-import { priceBookApi, productApi } from '@/api'
+import { priceBookApi, productApi, fetchAllPages, PAGE_SIZE } from '@/api'
 import { PRICE_CHANNEL_TYPE } from '@/utils/dict'
 import { formatDate } from '@/utils/format'
 import type { PriceBook, PriceBookItem, PriceChannelType, ProductSPU } from '@/types'
@@ -259,7 +259,8 @@ async function removeItem(r: PriceBookItem) {
 async function loadBooks() {
   loading.value = true
   try {
-    books.value = await priceBookApi.list({ keyword: bookKeyword.value || undefined, page_size: 100 })
+    // /price-books 返回裸数组无 total，统一 page_size=20 逐页拉全量
+    books.value = await fetchAllPages((p) => priceBookApi.list({ keyword: bookKeyword.value || undefined, page: p, page_size: PAGE_SIZE }))
     if (currentBookId.value && !books.value.some((b) => b.id === currentBookId.value)) {
       currentBookId.value = null
     }
@@ -271,7 +272,8 @@ async function loadBooks() {
 async function loadItems() {
   itemsLoading.value = true
   try {
-    allItems.value = await priceBookApi.items({ page_size: 100 })
+    // /price-book-items 无 book_id 服务端筛选参数（Apifox），统一 page_size=20 逐页拉全量后前端按簿过滤
+    allItems.value = await fetchAllPages((p) => priceBookApi.items({ page: p, page_size: PAGE_SIZE }))
   } finally {
     itemsLoading.value = false
   }
@@ -280,9 +282,10 @@ async function loadItems() {
 onMounted(async () => {
   loading.value = true
   try {
-    const [spuList] = await Promise.all([productApi.spus()])
-    spus.value = spuList
+    // 商品下拉需全量选项：统一 page_size=20 逐页拉取
+    const spuList = await fetchAllPages((p) => productApi.spus({ page: p, page_size: PAGE_SIZE }))
     spuOptions.value = spuList.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))
+    spus.value = spuList
     await Promise.all([loadBooks(), loadItems()])
   } finally {
     loading.value = false
@@ -292,6 +295,6 @@ onMounted(async () => {
 
 <style scoped>
 :deep(.row-active) td {
-  background-color: rgba(220, 38, 38, 0.06);
+  background-color: var(--primary-soft);
 }
 </style>

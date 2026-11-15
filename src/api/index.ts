@@ -1,13 +1,20 @@
+import type { ReturnOrder, ReturnPreview, ReturnCreateInput, ReturnConfirmInput, ReturnResult } from '@/types'
+
 // src/api/index.ts - Public API facade (one module per backend resource).
 import { get, post, put, del } from './http'
 import type {
-  Vendor,
-  VendorPayload,
   UserInfo,
   TokenResponse,
   Customer,
   AdminCustomer,
-  CustomerRegisterPayload,
+  CustomerCreatePayload,
+  CustomerCreditPayload,
+  CustomerAuditPayload,
+  CreditLog,
+  CreditApplication,
+  CreditApplicationResult,
+  CustomerResult,
+  SalesOption,
   CustomerUpdatePayload,
   Warehouse,
   WarehouseCreatePayload,
@@ -15,23 +22,28 @@ import type {
   WarehouseZone,
   WarehouseZoneCreatePayload,
   WarehouseZoneUpdatePayload,
-  Sales,
   SalesRankingItem,
+  SalesDashboard,
   Order,
+  OrderListItem,
+  OrderUpdatePayload,
+  OrderUpdateResult,
   OrderItem,
   PriceStrategy,
   Payment,
   CreditInfo,
   Statement,
   Commission,
-  KPIResponse,
+  DashboardOverview,
+  DashboardDays,
   ProductRanking,
   CustomerRanking,
+  SalesRanking,
   SalesTrendPoint,
-  AlertItem,
   Category,
   RegionNode,
   LevelConfig,
+  LevelStats,
   LevelCreatePayload,
   LevelUpdatePayload,
   LevelPricePreview,
@@ -49,7 +61,9 @@ import type {
   PriceBookItemUpdatePayload,
   ProductSPU,
   ProductSKU,
-  SkuAttribute,
+  SpuSavePayload,
+  SpuSaveResult,
+  PriceImpact,
   AuditLog,
   RoleConfig,
   FeatureNode,
@@ -57,8 +71,24 @@ import type {
   AccountCreatePayload,
   AccountUpdatePayload,
   UploadImageResponse,
+  Vendor,
+  VendorPayload,
+  PurchaseReceipt,
+  PurchaseResult,
+  VendorAccount,
+  VendorLedgerEntry,
   PageQuery,
   PageResult,
+  CustomerAccount,
+  PriceQuoteResponse,
+  CounterOrder,
+  CounterOrderPayload,
+  CounterOrderResult,
+  PrintRecordResult,
+  RecordOrderPayload,
+  RecordUpcomingTrips,
+  RecordFreightLine,
+  FrequentSku,
 } from '@/types'
 
 // Auth
@@ -70,24 +100,54 @@ export const authApi = {
 }
 
 // Products — SPU / SKU (backend /spus, /skus)
-// Real backend paginates /spus and /skus into PageResult; mock returns bare arrays — normalize to arrays.
+// Backend may return a PageResult envelope or a bare array for /spus and /skus — normalize to arrays.
 const toItems = <T>(v: T[] | PageResult<T>): T[] => (Array.isArray(v) ? v : v.items)
 
+// 统一分页规范：所有列表请求固定 page_size=20（与后端默认一致）；
+// 主列表用服务端分页，下拉选项/批量汇总等需要全量的场景用 fetchAllPages 逐页拉取
+export const PAGE_SIZE = 20
+
+/** 按 page_size=PAGE_SIZE 逐页拉取全量（兼容裸数组与分页信封响应），最多 200 页防死循环 */
+export async function fetchAllPages<T>(fetchPage: (page: number) => Promise<T[] | PageResult<T>>): Promise<T[]> {
+  const out: T[] = []
+  for (let page = 1; page <= 200; page++) {
+    const v = await fetchPage(page)
+    const items = Array.isArray(v) ? v : v.items
+    out.push(...items)
+    if (items.length < PAGE_SIZE) break
+    // 信封里有 total 时，凑够就停，避免整页数恰为 20 的倍数时多请求一页
+    if (!Array.isArray(v) && typeof v.total === 'number' && out.length >= v.total) break
+  }
+  return out
+}
+
 export const productApi = {
-  spus: (q: { keyword?: string; category_id?: number; page?: number; page_size?: number } = {}) =>
+  spus: (q: { keyword?: string; category_id?: number; is_miniprogram?: boolean; page?: number; page_size?: number } = {}) =>
     get<ProductSPU[] | PageResult<ProductSPU>>('/spus', { params: q }).then(toItems),
+  // 完整分页信封（含 total，Apifox SpuPageResponse），商品管理列表分页使用；裸数组响应兼容为单页全量
+  spusPage: (q: { keyword?: string; category_id?: number; is_miniprogram?: boolean; page?: number; page_size?: number } = {}) =>
+    get<ProductSPU[] | PageResult<ProductSPU>>('/spus', { params: q })
+      .then((v): PageResult<ProductSPU> => (Array.isArray(v) ? { items: v, total: v.length, page: 1, page_size: v.length } : v)),
   spu: (id: number) => get<ProductSPU>(`/spus/${id}`),
-  createSpu: (payload: any) => post<ProductSPU>('/spus', payload),
-  updateSpu: (id: number, payload: Partial<ProductSPU>) => put<ProductSPU>(`/spus/${id}`, payload),
+  // 保存商品返回业务写操作结构 {spu, affected_customer_prices, warnings}（products.md）
+  createSpu: (payload: SpuSavePayload) => post<SpuSaveResult>('/spus', payload),
+  updateSpu: (id: number, payload: SpuSavePayload) => put<SpuSaveResult>(`/spus/${id}`, payload),
+  // 保存前预览：改成本或规则后各价格的变化和低于新最低售价的专属价（仅管理员，pricing.md §2）
+  priceImpact: (
+    skuId: number,
+    body: { cost_price?: number; price_method?: string; price_value?: number; min_price_method?: string; min_price_value?: number },
+  ) => post<PriceImpact>(`/skus/${skuId}/price-impact`, body),
   removeSpu: (id: number) => del<void>(`/spus/${id}`),
-  skus: (spuId: number) => get<ProductSKU[]>(`/spus/${spuId}/skus`),
+  skus: (spuId: number) =>
+    // GET /spus/{spu_id}/skus 为分页响应（SkuAdminPageResponse）；单 SPU 的 SKU 数远小于 20，单页即可覆盖
+    get<ProductSKU[] | PageResult<ProductSKU>>(`/spus/${spuId}/skus`, { params: { page: 1, page_size: PAGE_SIZE } }).then(toItems),
   allSkus: (q: { page?: number; page_size?: number } = {}) =>
     get<ProductSKU[] | PageResult<ProductSKU>>('/skus', { params: q }).then(toItems),
+  sku: (id: number) => get<ProductSKU>(`/skus/${id}`),
   createSku: (spuId: number, payload: Partial<ProductSKU>) => post<ProductSKU>(`/spus/${spuId}/skus`, payload),
   updateSku: (skuId: number, payload: Partial<ProductSKU>) => put<ProductSKU>(`/skus/${skuId}`, payload),
   removeSku: (skuId: number) => del<void>(`/skus/${skuId}`),
-  generateSkus: (spuId: number, payload: { attributes: SkuAttribute[]; overwrite?: boolean }) =>
-    post<ProductSKU[]>(`/spus/${spuId}/skus/generate`, payload),
+  skuByBarcode: (barcode: string) => get<ProductSKU>(`/skus/by-barcode/${encodeURIComponent(barcode)}`),
 }
 
 // Vendors (供应商) — vendors.md；列表为分页信封，下拉选项用 fetchAllPages 拉全量
@@ -98,6 +158,23 @@ export const vendorApi = {
   create: (payload: VendorPayload) => post<Vendor>('/vendors', payload),
   update: (id: number, payload: VendorPayload) => put<Vendor>(`/vendors/${id}`, payload),
   remove: (id: number) => del<void>(`/vendors/${id}`),
+  account: (id: number) => get<VendorAccount>(`/vendors/${id}/account`),
+  ledger: (id: number, q: { page?: number; page_size?: number; date_from?: string; date_to?: string } = {}) =>
+    get<PageResult<VendorLedgerEntry>>(`/vendors/${id}/ledger`, { params: q }),
+  pay: (payload: { vendor_id: number; amount: string; method: string; paid_at?: string; remark?: string }) =>
+    post<{ payable_balance: string }>('/vendor-payments', payload),
+}
+
+export const purchaseApi = {
+  list: (q: { page?: number; page_size?: number; source_type?: string; vendor_id?: number; sku_id?: number; date_from?: string; date_to?: string } = {}) =>
+    get<PageResult<PurchaseReceipt>>('/purchase-receipts', { params: q }),
+  get: (id: number) => get<PurchaseReceipt>(`/purchase-receipts/${id}`),
+  create: (payload: { source_type: 'order' | 'stock'; vendor_id: number; items: { order_item_id?: number; sku_id: number; quantity: string; unit_cost: string; update_cost?: boolean }[]; remark?: string }) =>
+    post<PurchaseReceipt>('/purchase-receipts', payload),
+  confirm: (id: number, version: number, payment?: { method: string; amount: string }) =>
+    post<PurchaseResult>(`/purchase-receipts/${id}/confirm`, { version, payment }),
+  update: (id: number, payload: { version: number; item_id?: number; vendor_id?: number; unit_cost?: string; reason?: string }) =>
+    put<PurchaseResult>(`/purchase-receipts/${id}`, payload),
 }
 
 // Customers
@@ -112,14 +189,29 @@ export const customerApi = {
   remove: (id: number) => del<void>(`/customers/${id}`),
 }
 
+export const creditApplicationApi = {
+  list: (q: { status?: string; customer_id?: number; sales_id?: number; page?: number; page_size?: number } = {}) =>
+    get<CreditApplication[]>('/credit-applications', { params: q }),
+  approve: (id: number, payload: { approved_limit?: number | string; comment: string }) =>
+    post<CreditApplicationResult>(`/credit-applications/${id}/approve`, payload),
+  reject: (id: number, payload: { comment: string }) =>
+    post<CreditApplicationResult>(`/credit-applications/${id}/reject`, payload),
+}
+
 export const adminCustomerApi = {
-  list: (q: { keyword?: string; status?: string; page?: number; page_size?: number } = {}) =>
+  list: (q: { keyword?: string; status?: string; sales_id?: number; wechat_bound?: boolean; credit_source?: string; level_id?: number; audit?: string; page?: number; page_size?: number } = {}) =>
     get<AdminCustomer[]>('/customers', { params: q }),
-  register: (payload: CustomerRegisterPayload) => post<AdminCustomer>('/customers/register', payload),
+  create: (payload: CustomerCreatePayload) => post<CustomerResult>('/customers', payload),
+  salesOptions: () => get<SalesOption[]>('/customers/sales-options'),
+  unbindWechat: (id: number) => post<CustomerResult>(`/customers/${id}/unbind-wechat`),
+  setCredit: (id: number, payload: CustomerCreditPayload) => put<CustomerResult>(`/customers/${id}/credit`, payload),
+  creditLogs: (id: number) => get<CreditLog[]>(`/customers/${id}/credit-logs`),
+  audit: (id: number, payload: CustomerAuditPayload) => post<CustomerResult>(`/customers/${id}/audit`, payload),
   get: (id: number) => get<AdminCustomer>(`/customers/${id}`),
   update: (id: number, payload: CustomerUpdatePayload) => put<AdminCustomer>(`/customers/${id}`, payload),
   remove: (id: number) => del<void>(`/customers/${id}`),
   assignLevel: (id: number, level_id: number) => put<AdminCustomer>(`/customers/${id}/level`, { level_id }),
+  account: (id: number) => get<CustomerAccount>(`/customers/${id}/account`),
 }
 
 export const warehouseApi = {
@@ -135,29 +227,46 @@ export const warehouseApi = {
 
 // Sales
 export const salesApi = {
-  list: (q: PageQuery = {}) => get<PageResult<Sales>>('/sales', { params: q }),
-  all: () => get<Sales[]>('/sales/all'),
-  get: (id: number) => get<Sales>(`/sales/${id}`),
-  create: (payload: Omit<Sales, 'id' | 'joined_at' | 'total_customers' | 'active_customers' | 'total_gmv' | 'estimated_commission'>) =>
-    post<Sales>('/sales', payload),
-  update: (id: number, payload: Partial<Sales>) => put<Sales>(`/sales/${id}`, payload),
   ranking: (start: string, end: string) =>
     get<SalesRankingItem[]>('/sales/ranking', { params: { period_start: start, period_end: end } }),
+  dashboard: (salesId: number) => get<SalesDashboard>(`/sales/${salesId}/dashboard`),
 }
 
 // Orders
 export const orderApi = {
-  list: (q: PageQuery = {}) => get<PageResult<Order>>('/orders', { params: q }),
-  get: (id: string) => get<Order>(`/orders/${id}`),
+  list: (q: PageQuery & { created_at_from?: string; created_at_to?: string; source?: string; delivery_mode?: string; status?: string; pay_status?: string; return_status?: string; customer_id?: number; sales_id?: number; route_trip_id?: number; freight_shipment_id?: number; over_credit?: boolean; is_walk_in?: boolean } = {}) => get<PageResult<OrderListItem>>('/orders', { params: q }),
+  get: (id: number) => get<OrderListItem>(`/orders/${id}`),
+  update: (id: number, payload: OrderUpdatePayload) => put<OrderUpdateResult>(`/orders/${id}`, payload),
   create: (payload: { customer_id: number; items: { product_id: number; quantity: number; unit: string }[]; payment_method: Order['payment_method']; remark?: string }) =>
     post<Order>('/orders', payload),
   audit: (id: string, approved: boolean, reason?: string) => post<Order>(`/orders/${id}/audit`, { approved, reason }),
   updateStatus: (id: string, status: Order['status']) => post<Order>(`/orders/${id}/status`, { status }),
   pickingList: (q: PageQuery = {}) => get<{ sku: string; name: string; unit: string; quantity: number; order_ids: string[] }[]>('/orders/picking', { params: q }),
+  counterCreate: (payload: CounterOrderPayload) =>
+    post<CounterOrderResult>('/orders', payload, {
+      headers: { 'Idempotency-Key': `counter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` },
+    }),
+  recordCreate: (payload: RecordOrderPayload) =>
+    post<CounterOrderResult>('/orders', payload),
+  deliver: (id: number, items?: { order_item_id: number; delivered_quantity: string }[]) =>
+    post<CounterOrderResult>(`/orders/${id}/deliver`, { items }),
+  counterGet: (id: number) => get<CounterOrder>(`/orders/${id}`),
+  recordPrint: (orderIds: number[], docType: 'counter_sale' | 'delivery_note' = 'counter_sale') =>
+    post<PrintRecordResult[]>('/orders/print-records', { order_ids: orderIds, doc_type: docType }),
+  approve: (id: number, comment?: string) => post<CounterOrderResult>(`/orders/${id}/approve`, { comment }),
+  reject: (id: number, reason: string) => post<CounterOrderResult>(`/orders/${id}/reject`, { reason }),
+}
+
+export const deliveryApi = {
+  upcomingTrips: (customerId: number) => get<RecordUpcomingTrips>(`/customers/${customerId}/upcoming-trips`),
+  freightLines: () => get<RecordFreightLine[]>('/freight-lines'),
+  frequentSkus: (customerId: number) => get<FrequentSku[]>(`/customers/${customerId}/frequent-skus`),
 }
 
 // Prices
 export const priceApi = {
+  quote: (payload: { customer_id?: number | null; items: { sku_id: number; quantity: number | string }[] }) =>
+    post<PriceQuoteResponse>('/prices/quote', payload),
   list: (q: PageQuery = {}) => get<PageResult<PriceStrategy>>('/prices/strategies', { params: q }),
   all: () => get<PriceStrategy[]>('/prices/strategies/all'),
   create: (payload: Omit<PriceStrategy, 'id' | 'created_at'>) => post<PriceStrategy>('/prices/strategies', payload),
@@ -175,16 +284,13 @@ export const financeApi = {
   settleCommissions: (ids: number[]) => post('/finance/commissions/settle', { ids }),
 }
 
-// Dashboard
+// Dashboard（system.md「看板」，仅管理员）
 export const dashboardApi = {
-  kpi: (start: string, end: string) => get<KPIResponse>('/dashboard/kpi', { params: { period_start: start, period_end: end } }),
-  topProducts: (start: string, end: string, limit = 10) =>
-    get<ProductRanking[]>('/dashboard/products/top', { params: { period_start: start, period_end: end, limit } }),
-  topCustomers: (start: string, end: string, limit = 10) =>
-    get<CustomerRanking[]>('/dashboard/customers/top', { params: { period_start: start, period_end: end, limit } }),
-  salesTrend: (start: string, end: string) =>
-    get<SalesTrendPoint[]>('/dashboard/sales/trend', { params: { period_start: start, period_end: end } }),
-  alerts: () => get<AlertItem[]>('/dashboard/alerts'),
+  overview: (refresh = false) => get<DashboardOverview>('/dashboard/overview', { params: refresh ? { refresh: true } : {} }),
+  salesTrend: (days: DashboardDays) => get<SalesTrendPoint[]>('/dashboard/sales-trend', { params: { days } }),
+  topProducts: (days: DashboardDays, limit = 10) => get<ProductRanking[]>('/dashboard/products/top', { params: { days, limit } }),
+  topCustomers: (days: DashboardDays, limit = 10) => get<CustomerRanking[]>('/dashboard/customers/top', { params: { days, limit } }),
+  topSales: (days: DashboardDays, limit = 5) => get<SalesRanking[]>('/dashboard/sales/top', { params: { days, limit } }),
 }
 
 // Categories (4-level tree)
@@ -203,6 +309,8 @@ export const regionApi = {
 // Customer Levels
 export const levelApi = {
   list: () => get<LevelConfig[]>('/customer-levels'),
+  // 等级行 + 聚合统计（创建人、客户数、月度销售额），等级价格界面使用（Apifox CustomerLevelStatsResponse）
+  stats: () => get<LevelStats[]>('/customer-levels/stats'),
   get: (id: number) => get<LevelConfig>(`/customer-levels/${id}`),
   create: (payload: LevelCreatePayload) => post<LevelConfig>('/customer-levels', payload),
   update: (id: number, payload: LevelUpdatePayload) => put<LevelConfig>(`/customer-levels/${id}`, payload),
@@ -280,10 +388,26 @@ export const featureApi = {
 
 export const accountApi = {
   list: (keyword?: string) => get<SystemAccount[]>('/system/accounts', { params: { keyword } }),
+  listSales: (params: { keyword?: string; is_active?: boolean }) =>
+    get<SystemAccount[]>('/system/accounts', { params: { ...params, role_code: 'sales' } }),
   get: (id: number) => get<SystemAccount>(`/system/accounts/${id}`),
   create: (payload: AccountCreatePayload) => post<SystemAccount>('/system/accounts', payload),
   update: (id: number, payload: AccountUpdatePayload) => put<SystemAccount>(`/system/accounts/${id}`, payload),
   remove: (id: number) => del<void>(`/system/accounts/${id}`),
   updatePassword: (id: number, new_password: string, old_password?: string | null) =>
     put<void>(`/system/accounts/${id}/password`, old_password ? { new_password, old_password } : { new_password }),
+}
+
+export const returnApi = {
+  list: (params: PageQuery) => get<PageResult<ReturnOrder>>('/return-orders', { params }),
+  get: (id: number) => get<ReturnOrder>(`/return-orders/${id}`),
+  preview: (payload: ReturnCreateInput) => post<ReturnPreview>('/return-orders/preview', payload),
+  create: (payload: ReturnCreateInput, key: string) =>
+    post<ReturnResult>('/return-orders', payload, { headers: { 'Idempotency-Key': key } }),
+  confirm: (id: number, payload: ReturnConfirmInput, key: string) =>
+    post<ReturnResult>(`/return-orders/${id}/confirm`, payload, { headers: { 'Idempotency-Key': key } }),
+  reject: (id: number, reason: string) => post<ReturnResult>(`/return-orders/${id}/reject`, { reason }),
+  recordPrint: (id: number) => post<{
+    return_order_id: number; print_count: number; last_printed_at: string; is_reprint: boolean
+  }>(`/return-orders/${id}/print-record`),
 }

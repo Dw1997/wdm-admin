@@ -1,5 +1,5 @@
 <template>
-  <n-layout has-sider style="height: 100vh">
+  <n-layout has-sider :style="{ height: '100vh', '--wdm-sider-width': collapsed ? '64px' : '220px' }">
     <n-layout-sider
       bordered
       collapse-mode="width"
@@ -10,7 +10,6 @@
       :native-scrollbar="false"
       @collapse="collapsed = true"
       @expand="collapsed = false"
-      :inverted="true"
     >
       <div class="logo" :class="{ collapsed }">
         <span class="logo-mark">副</span>
@@ -22,12 +21,11 @@
         :collapsed-width="64"
         :collapsed-icon-size="18"
         :options="menuOptions"
-        :inverted="true"
-        @update:value="onMenuSelect"
+        :node-props="menuNodeProps"
       />
     </n-layout-sider>
 
-    <n-layout>
+    <n-layout content-class="main-scroll">
       <n-layout-header bordered class="header">
         <div class="header-left">
           <n-breadcrumb>
@@ -46,12 +44,15 @@
             style="width: 220px"
             @update:value="onSearchSelect"
           />
+          <n-button quaternary circle :title="app.isDark ? '切换为浅色' : '切换为深色'" @click="app.toggleTheme()">
+            <template #icon><n-icon :component="app.isDark ? Sun : Moon" /></template>
+          </n-button>
           <n-button quaternary circle @click="$router.push('/system/audit-logs')">
             <template #icon><n-icon :component="Bell" /></template>
           </n-button>
           <n-dropdown :options="userOptions" @select="onUserAction">
             <div class="user-info">
-              <n-avatar round size="small" style="background: #dc2626">{{ auth.userInitial }}</n-avatar>
+              <n-avatar round size="small" style="background: var(--primary); color: #fff">{{ auth.userInitial }}</n-avatar>
               <span class="user-name">{{ auth.user?.real_name || auth.user?.username || '管理员' }}</span>
               <n-icon :component="ChevronDown" size="14" />
             </div>
@@ -72,7 +73,7 @@
           </n-tab-pane>
         </n-tabs>
       </div>
-      <n-layout-content class="content" :native-scrollbar="false">
+      <n-layout-content class="content" :class="{ 'sales-dashboard-content': route.name === 'sales-dashboard' }" :native-scrollbar="false">
         <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
             <component :is="Component" :key="route.fullPath" />
@@ -99,20 +100,22 @@
 <script setup lang="ts">
 import { h, ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useMessage, useDialog } from 'naive-ui'
+import { useMessage, useDialog, type MenuGroupOption, type MenuOption } from 'naive-ui'
 import { NIcon } from 'naive-ui'
 import {
   Dashboard, ShoppingCart, Tag, Users, BuildingCommunity,
   ClipboardList, Cash, Settings, Bell, ChevronDown, Power, UserCircle, Lock, Truck,
-  Plus, Package, Tags, UserCheck, Medal, MapPin, TrendingUp, Printer, Coin, Wallet, ShieldCheck, FileSearch, ChartLine, BuildingFactory, ClipboardPlus, ReceiptRefund, FileInvoice,
+  Plus, Package, Tags, UserCheck, Medal, MapPin, TrendingUp, Printer, Coin, Wallet, ShieldCheck, FileSearch, ChartLine, BuildingFactory, ClipboardPlus, ReceiptRefund, FileInvoice, Route, Sun, Moon,
 } from '@vicons/tabler'
 import { accountApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import { useAppStore } from '@/stores/app'
 import { useTabsStore } from '@/stores/tabs'
 
 const route = useRoute()
 const router = useRouter()
 const auth = useAuthStore()
+const app = useAppStore()
 const tabStore = useTabsStore()
 const message = useMessage()
 const dialog = useDialog()
@@ -124,6 +127,7 @@ const passwordSaving = ref(false)
 const oldPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
+let orderTabSequence = 0
 
 function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
@@ -133,17 +137,19 @@ const menuOptions = [
   { label: '数据看板', key: '/dashboard', icon: renderIcon(Dashboard) },
   {
     label: '订单中心', key: 'order-center', icon: renderIcon(ClipboardPlus), children: [
-      { label: '创建订单', key: '/order-center/create', icon: renderIcon(Plus) },
+      { label: '门店零售', key: '/order-center/counter', icon: renderIcon(ShoppingCart) },
+      { label: '录单', key: '/order-center/create', icon: renderIcon(Plus) },
       { label: '订单列表', key: '/order-center/list', icon: renderIcon(ClipboardList) },
-      { label: '退款订单', key: '/order-center/refund', icon: renderIcon(ReceiptRefund) },
-      { label: '分拣打印', key: '/order-center/picking', icon: renderIcon(Printer) },
+      { label: '退货单', key: '/order-center/refund', icon: renderIcon(ReceiptRefund) },
+      { label: '打印中心', key: '/order-center/picking', icon: renderIcon(Printer) },
     ],
   },
   {
-    label: '商品中心', key: 'products', icon: renderIcon(ShoppingCart), children: [
-      { label: '新建商品', key: '/products/create', icon: renderIcon(Plus) },
-      { label: '商品管理', key: '/products/list', icon: renderIcon(Package) },
-      { label: '分类管理', key: '/products/categories', icon: renderIcon(Tags) },
+    label: '商品中心', key: 'spus', icon: renderIcon(ShoppingCart), children: [
+      { label: '商品看板', key: '/spus/dashboard', icon: renderIcon(TrendingUp) },
+      { label: '新建商品', key: '/spus/create', icon: renderIcon(Plus) },
+      { label: '商品管理', key: '/spus/list', icon: renderIcon(Package) },
+      { label: '分类管理', key: '/spus/categories', icon: renderIcon(Tags) },
     ],
   },
   {
@@ -162,25 +168,31 @@ const menuOptions = [
     ],
   },
   {
+    label: '库存管理', key: 'inventory', icon: renderIcon(Package), children: [
+      { label: '采购入库', key: '/inventory/purchases', icon: renderIcon(ClipboardList) },
+    ],
+  },
+  {
     label: '客户管理', key: 'customers', icon: renderIcon(Users), children: [
-      { label: '新建客户', key: '/customers/create', icon: renderIcon(Plus) },
       { label: '客户列表', key: '/customers/list', icon: renderIcon(Users) },
       { label: '客户额度', key: '/customers/credit', icon: renderIcon(Wallet) },
       { label: '客户审核', key: '/customers/audit', icon: renderIcon(UserCheck) },
       { label: '客户等级', key: '/customers/levels', icon: renderIcon(Medal) },
-      { label: '客户地址', key: '/customers/addresses', icon: renderIcon(MapPin) },
     ],
   },
   {
-    label: '物流管理', key: 'logistics', icon: renderIcon(Truck), children: [
-      { label: '新建物流', key: '/logistics/create', icon: renderIcon(Plus) },
-      { label: '物流列表', key: '/logistics/list', icon: renderIcon(ClipboardList) },
+    label: '配送管理', key: 'delivery', icon: renderIcon(Truck), children: [
+      { label: '安排出车', key: '/delivery/trips', icon: renderIcon(Truck) },
+      { label: '待排车订单', key: '/delivery/pool', icon: renderIcon(ClipboardList) },
+      { label: '零担发货', key: '/delivery/freight', icon: renderIcon(Package) },
+      { label: '地点设置 / 常用路线', key: '/delivery/places', icon: renderIcon(MapPin) },
+      { label: '零担线路', key: '/delivery/freight-lines', icon: renderIcon(Route) },
     ],
   },
   {
     label: '销售管理', key: 'sales', icon: renderIcon(BuildingCommunity), children: [
+      { label: '销售看板', key: '/sales/dashboard', icon: renderIcon(TrendingUp) },
       { label: '销售列表', key: '/sales/list', icon: renderIcon(UserCircle) },
-      { label: '业绩排行', key: '/sales/performance', icon: renderIcon(TrendingUp) },
     ],
   },
   {
@@ -224,16 +236,16 @@ function onSearchSelect(key: string | number | null) {
 
 const activeKey = computed(() => {
   const p = route.path
-  if (p.startsWith('/products')) {
-    if (p === '/products') return '/products/list'
-    if (p.startsWith('/products/edit')) return '/products/list'
+  if (p.startsWith('/spus')) {
+    if (p === '/spus') return '/spus/list'
+    if (p.startsWith('/spus/edit')) return '/spus/list'
     return p
   }
   if (p.startsWith('/prices')) return p === '/prices' ? '/prices/suggested' : p
   if (p.startsWith('/suppliers')) return p === '/suppliers' ? '/suppliers/list' : p
   if (p.startsWith('/customers')) return p === '/customers' ? '/customers/list' : p
-  if (p.startsWith('/logistics')) return p === '/logistics' ? '/logistics/list' : p
-  if (p.startsWith('/sales')) return p === '/sales' ? '/sales/list' : p
+  if (p.startsWith('/delivery')) return p === '/delivery' ? '/delivery/trips' : p
+  if (p.startsWith('/sales')) return p === '/sales' || p === '/sales/new' ? '/sales/list' : p
   if (p.startsWith('/order-center')) return p === '/order-center' ? '/order-center/list' : p
   if (p.startsWith('/finance')) return p === '/finance' ? '/finance/payments' : p
   if (p.startsWith('/system')) return p === '/system' ? '/system/audit-logs' : p
@@ -253,7 +265,18 @@ const userOptions = [
 ]
 
 function onMenuSelect(key: string) {
+  // 录单和门店零售每次点击都在应用内新开标签页
+  if (key === '/order-center/create' || key === '/order-center/counter') {
+    const tabId = `${Date.now()}-${++orderTabSequence}`
+    router.push({ path: key, query: { t: tabId } })
+    return
+  }
   if (key.startsWith('/')) router.push(key)
+}
+
+function menuNodeProps(option: MenuOption | MenuGroupOption) {
+  if (option.children?.length || option.key == null) return {}
+  return { onClick: () => onMenuSelect(String(option.key)) } as any
 }
 
 function onTabSelect(key: string) {
@@ -329,28 +352,38 @@ watch(() => route.fullPath, () => tabStore.open(route), { immediate: true })
 
 <style scoped>
 .logo {
-  height: 56px; display: flex; align-items: center; padding: 0 16px;
-  color: #fff; font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden;
+  height: 60px; display: flex; align-items: center; padding: 0 18px;
+  color: var(--text-1); font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden;
 }
 .logo.collapsed { padding: 0; justify-content: center; }
 .logo-mark {
-  width: 32px; height: 32px; border-radius: 6px; background: #dc2626;
+  width: 32px; height: 32px; border-radius: 9px;
+  background: linear-gradient(135deg, #4f46e5, #818cf8); color: #fff;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 16px; margin-right: 10px; flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
 }
 .logo.collapsed .logo-mark { margin-right: 0; }
 .header {
   height: 56px; display: flex; align-items: center; justify-content: space-between;
-  padding: 0 24px; background: #fff;
+  padding: 0 24px; background: var(--bg-card);
 }
 .header-left, .header-right { display: flex; align-items: center; gap: 12px; }
-.tab-bar { padding: 0 16px; background: #fff; border-bottom: 1px solid #e5e7eb; }
+.tab-bar { padding: 8px 20px 0; background: var(--bg-card); border-bottom: 1px solid var(--border); }
+/* 标签页：平铺风格，激活项用主色淡底 + 主色文字 */
+.tab-bar :deep(.n-tabs-tab) { border-radius: 8px 8px 0 0; }
 .tab-bar :deep(.n-tabs-tab--active) {
-  background-color: var(--layout-bg, #f5f5f7) !important;
+  background-color: var(--primary-soft) !important;
+  border-color: transparent !important;
 }
+.tab-bar :deep(.n-tabs-tab--active .n-tabs-tab__label) { color: var(--primary) !important; font-weight: 600; }
+.tab-bar :deep(.n-tabs-tab--active .n-base-close) { --n-close-icon-color: var(--primary); }
 .user-info { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .user-name { font-size: 14px; }
-.content { padding: 0; background: var(--layout-bg, #f5f5f7); }
+:deep(.main-scroll) { display: flex; flex-direction: column; overflow: hidden; }
+.header, .tab-bar { flex-shrink: 0; }
+.content { flex: 1; min-height: 0; padding: 0; background: var(--bg-page); }
+.sales-dashboard-content :deep(.n-scrollbar-content) { height: 100%; min-height: 0; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

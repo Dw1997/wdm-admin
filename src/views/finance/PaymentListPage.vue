@@ -29,7 +29,7 @@ const query = reactive<{ page: number; page_size: number; keyword: string; statu
 const dateRange = ref<[number, number] | null>(null); const message = useMessage()
 
 const stats = computed(() => [
-  { label: '总收入', value: `¥${formatQty(list.value.filter(p => p.status === 'success').reduce((s, p) => s + p.amount, 0))}`, color: 'linear-gradient(135deg,#dc2626,#ef4444)', icon: '💰' },
+  { label: '总收入', value: `¥${formatQty(list.value.filter(p => p.status === 'success').reduce((s, p) => s + p.amount, 0))}`, color: 'linear-gradient(135deg,#4f46e5,#818cf8)', icon: '💰' },
   { label: '成功笔数', value: formatQty(list.value.filter(p => p.status === 'success').length), color: 'linear-gradient(135deg,#16a34a,#22c55e)', icon: '✅' },
   { label: '处理中', value: formatQty(list.value.filter(p => p.status === 'pending').length), color: 'linear-gradient(135deg,#ea580c,#f59e0b)', icon: '⏰' },
   { label: '失败', value: formatQty(list.value.filter(p => p.status === 'failed').length), color: 'linear-gradient(135deg,#7c3aed,#a855f7)', icon: '❌' },

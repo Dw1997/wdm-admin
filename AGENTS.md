@@ -16,26 +16,22 @@ There is no test framework. For UI changes, run `npm run dev` and exercise the a
 
 ## High-Level Architecture
 
-### Data flow: views → API facade → http client → (mock adapter | real backend)
+### Data flow: views → API facade → http client → real backend
 
 The app has one HTTP entrypoint. Views import **only** from `@/api` (the facade in `src/api/index.ts`), which groups backend resources into typed objects (`productApi`, `orderApi`, `financeApi`, etc.). The facade calls the thin wrappers in `src/api/http.ts` (`get`/`post`/`put`/`del`), which wrap a single shared Axios instance.
 
 Two things in `http.ts` are easy to miss:
-1. **The response interceptor unwraps the `{code, message, data}` envelope** — the backend (`wdm-backend/app/core/response.py` middleware) wraps every `/api/v1` JSON response in `{code, message, data}` (`code: 200` on success; errors keep HTTP 4xx/5xx with `code` = HTTP status). The interceptor returns the inner `data` field, so facade methods receive the payload directly, never the envelope or an `AxiosResponse`. Typed wrappers (`get<T, T>`) enforce this at the call site. The mock adapter emits the same envelope (`buildResponse` in `adapter.ts`).
-2. **Mock mode swaps the Axios adapter**, not the base URL. When `VITE_API_BASE_URL` is empty, `http.defaults.adapter` is replaced by `mockAdapter` (`src/api/mock/adapter.ts`), an in-memory router that pattern-matches method+path against `services.ts`/`services2.ts`. This means the entire app — interceptors, auth headers, error handling — runs identically in mock and real mode; only the transport differs. The default `baseURL` is `/api/v1`.
+1. **The response interceptor unwraps the `{code, message, data}` envelope** — the backend (`wdm-backend/app/core/response.py` middleware) wraps every `/api/v1` JSON response in `{code, message, data}` (`code: 200` on success; errors keep HTTP 4xx/5xx with `code` = HTTP status). The interceptor returns the inner `data` field, so facade methods receive the payload directly, never the envelope or an `AxiosResponse`. Typed wrappers (`get<T, T>`) enforce this at the call site.
+2. **Base URL resolution.** `baseURL` is `VITE_API_BASE_URL` when set, otherwise relative `/api/v1` (pair with the dev proxy `VITE_API_PROXY_TARGET` to reach a live FastAPI backend). The former in-memory mock adapter has been removed — every request goes to the real backend, and unimplemented interfaces fail with network/HTTP errors.
 
-### Mock layer split
+### Adding an endpoint
 
-The mock backend is split into two parallel halves purely for file-size management, not by domain boundary:
-- `services.ts` / `db.ts` — core resources: auth, products, customers, sales, orders, prices, finance, dashboard.
-- `services2.ts` / `db2.ts` — secondary resources: categories, customer levels, SPU/SKU, audit logs.
-
-Both are wired into the same route table in `adapter.ts`. To add an endpoint, update in order: `src/types/index.ts` → `src/api/index.ts` → `src/api/mock/adapter.ts` → `services.ts`/`services2.ts` → `db.ts`/`db2.ts`.
+To add an endpoint, update in order: `src/types/index.ts` → `src/api/index.ts` (facade method) → `wdm-backend` route. The interface must already exist in Apifox (see API-First UI Workflow below); the mock layer (`src/api/mock`) was removed and must not be reintroduced.
 
 ### Auth & routing
 
-- `useAuthStore` (`stores/auth.ts`) persists tokens to `localStorage` under keys `wdm_admin_access` / `wdm_admin_refresh`. The request interceptor attaches `Authorization: Bearer <token>`; a `401` response triggers `auth.logout()` + redirect to `/login`. A `fetchMe` failure falls back to a default admin user so mock mode always works.
-- `router.beforeEach` guards all non-`public` routes and sets `document.title`. The router nests page routes under layout-group parents (`/products`, `/customers`, …) that share `MainLayout.vue`.
+- `useAuthStore` (`stores/auth.ts`) persists tokens to `localStorage` under keys `wdm_admin_access` / `wdm_admin_refresh`. The request interceptor attaches `Authorization: Bearer <token>`; a `401` response triggers `auth.logout()` + redirect to `/login`. A `fetchMe` failure leaves `user` null — there is no fake-user fallback.
+- `router.beforeEach` guards all non-`public` routes and sets `document.title`. The router nests page routes under layout-group parents (`/spus`, `/customers`, …) that share `MainLayout.vue`.
 - The sidebar `menuOptions` in `MainLayout.vue` is **hard-coded and separate** from the router table — keep both in sync when adding/removing routes.
 
 ### Types
@@ -61,7 +57,7 @@ Pinia stores: `auth.ts` (tokens + user) and `app.ts` (sidebar collapse, persiste
 
 ## Environment
 
-The app runs on the in-memory mock backend by default. Set `VITE_API_BASE_URL` (in `.env`, or override via gitignored `.env.local`) to hit a real backend; leaving it empty enables mock mode. See `.env` for all available variables (`VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET`, `VITE_APP_TITLE`).
+The app calls the real FastAPI backend only; the in-memory mock data layer has been removed. Set `VITE_API_BASE_URL` (in `.env`, or override via gitignored `.env.local`) to point at the backend; leaving it empty falls back to relative `/api/v1`. Until the backend interfaces are implemented, API calls will surface network/HTTP errors. See `.env` for all available variables (`VITE_API_BASE_URL`, `VITE_API_PROXY_TARGET`, `VITE_APP_TITLE`).
 
 ## Commit & Pull Request Guidelines
 

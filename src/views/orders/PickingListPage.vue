@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import { h, ref, computed, onMounted } from 'vue'
 import { NTag, NInput, useMessage, type DataTableColumns } from 'naive-ui'
-import { orderApi, customerApi } from '@/api'
+import { orderApi, customerApi, fetchAllPages, PAGE_SIZE } from '@/api'
 import { formatQty } from '@/utils/format'
 import type { Order, Customer } from '@/types'
 
@@ -27,7 +27,7 @@ const routeDialog = ref(false); const routes = ref<any[]>([])
 const summary = computed(() => {
   const skus = new Set(rows.value.map(r => r.sku)); const totalQty = rows.value.reduce((s, r) => s + r.quantity, 0); const orders = new Set(rows.value.flatMap(r => r.order_ids))
   return [
-    { label: '待拣 SKU', value: formatQty(skus.size), color: 'linear-gradient(135deg,#dc2626,#ef4444)', icon: '📦' },
+    { label: '待拣 SKU', value: formatQty(skus.size), color: 'linear-gradient(135deg,#4f46e5,#818cf8)', icon: '📦' },
     { label: '待拣总数', value: formatQty(totalQty), color: 'linear-gradient(135deg,#ea580c,#f59e0b)', icon: '📋' },
     { label: '涉及订单', value: formatQty(orders.size), color: 'linear-gradient(135deg,#16a34a,#22c55e)', icon: '💰' },
     { label: '待分拣', value: formatQty(orders.size), color: 'linear-gradient(135deg,#7c3aed,#a855f7)', icon: '🚚' },
@@ -56,9 +56,10 @@ async function reload() {
 }
 async function buildRoutes() {
   const customers = await customerApi.all(); const custMap = new Map<number, Customer>(); customers.forEach(c => custMap.set(c.id, c))
-  const orders = await orderApi.list({ status: 'paid', page: 1, page_size: 100 })
+  // 排线需覆盖全部待分拣订单：统一 page_size=20 逐页拉全量
+  const orders = await fetchAllPages((p) => orderApi.list({ status: 'paid', page: p, page_size: PAGE_SIZE }))
   const regions = new Map<string, { customers: Set<string>; orders: number; amount: number }>()
-  for (const o of orders.items) {
+  for (const o of orders) {
     const c = custMap.get(o.customer_id); const region = c?.address?.split(/\d+/)[0]?.trim() || '未分区'
     const cur = regions.get(region) ?? { customers: new Set(), orders: 0, amount: 0 }
     cur.customers.add(c?.shop_name || c?.name || o.customer_name); cur.orders++; cur.amount += o.total_amount; regions.set(region, cur)

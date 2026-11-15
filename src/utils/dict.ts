@@ -1,5 +1,5 @@
 // src/utils/dict.ts - Static dictionary / enum label helpers.
-import type { OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType, PriceMethod, PriceChannelType, PriceSource, VendorType, VendorStatus } from '@/types'
+import type { DashboardTodoCode, OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, CustomerLevelType, PriceAdjustmentType, PriceMethod, PriceChannelType, PriceSource, VendorType, VendorStatus } from '@/types'
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }> = {
   pending_audit: { label: '待审核', type: 'warning' },
@@ -79,6 +79,22 @@ export const RULE_SOURCE: Record<'sku' | 'level' | 'none', string> = {
   none: '无规则',
 }
 
+// 看板「要处理的事」：文案与点击跳转（跳转目标尚未建好的页面会提示"尚未开放"）
+export const DASHBOARD_TODO: Record<DashboardTodoCode, { label: string; to: string; toLabel: string }> = {
+  pool_orders: { label: '待排车订单', to: '/delivery/pool', toLabel: '待排车订单' },
+  pending_customers: { label: '待审核客户', to: '/customers/audit', toLabel: '客户审核' },
+  pending_returns: { label: '待确认退货单', to: '/order-center/refund', toLabel: '退货单' },
+  credit_applications: { label: '待审批调额申请', to: '/finance/credit', toLabel: '客户账期' },
+  negative_stock: { label: '负库存商品', to: '/inventory/stock', toLabel: '库存查询' },
+  no_upcoming_trip: { label: '近期未安排出车', to: '/delivery/trips', toLabel: '安排出车' },
+}
+
+export const OVERDUE_BUCKET: Record<'1_30' | '31_60' | '60_plus', string> = {
+  '1_30': '1–30 天',
+  '31_60': '31–60 天',
+  '60_plus': '60 天以上',
+}
+
 // ---------- 供应商 ----------
 export const VENDOR_TYPE: Record<VendorType, string> = {
   market: '市场店家',
@@ -95,3 +111,9 @@ export const VENDOR_STATUS: Record<VendorStatus, { label: string; type: 'success
 }
 export const VENDOR_STATUS_OPTIONS = (Object.keys(VENDOR_STATUS) as VendorStatus[]).map((value) => ({ label: VENDOR_STATUS[value].label, value }))
 export const vendorStatusMeta = (s: string) => VENDOR_STATUS[s as VendorStatus] || { label: s, type: 'error' as const }
+
+export const returnStatusLabels = { pending: '待确认', confirmed: '已确认', rejected: '已驳回' }
+export const returnSettlementLabels = { none: '—', unsettled: '未平', partial: '部分已平', settled: '已平完' }
+export const returnRefundLabels = { credit: '挂账待抵', wechat: '微信退款', alipay: '支付宝退款', cash: '现金退款' }
+export const returnFreightLabels = { none: '无退货运费', deduct: '运费补给客户', store_paid: '本店承担', customer_paid: '客户承担' }
+export const returnDispositionLabels = { restock: '退回库存', write_off: '报损' }

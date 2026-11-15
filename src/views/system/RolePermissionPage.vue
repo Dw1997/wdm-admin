@@ -267,7 +267,7 @@ onMounted(() => { reloadRoles(); loadPermissions() })
 .permission-tree-box {
   max-height: 480px;
   overflow: auto;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px;
 }

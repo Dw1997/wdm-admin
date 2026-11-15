@@ -32,7 +32,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       user.value = await authApi.me()
     } catch {
-      user.value = { id: 0, username: 'admin', real_name: '系统管理员', role: 'admin' }
+      // No mock fallback: leave user empty on failure (401 is handled by the http interceptor).
+      user.value = null
     }
   }
 

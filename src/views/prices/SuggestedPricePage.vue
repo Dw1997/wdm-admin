@@ -28,14 +28,17 @@
       </n-alert>
       <n-data-table
         :columns="productColumns"
-        :data="pagedProducts"
+        :data="rows"
         :loading="loading"
         :bordered="false"
         size="small"
         :row-key="(row: ProductSPU) => row.id"
+        :expanded-row-keys="expandedKeys"
+        :row-props="rowProps"
+        @update:expanded-row-keys="(k: Array<string | number>) => (expandedKeys = k as number[])"
       />
       <div class="pagination-bar">
-        <n-pagination v-model:page="page" :item-count="total" :page-size="pageSize" @update:page="loadPageSkus" />
+        <n-pagination v-model:page="page" :item-count="total" :page-size="pageSize" @update:page="reload" />
       </div>
     </div>
   </div>
@@ -47,19 +50,37 @@ import {
   NButton, NInputNumber, NSelect, NDataTable, useMessage,
   type DataTableColumns,
 } from 'naive-ui'
-import { productApi, categoryApi } from '@/api'
+import { productApi, categoryApi, PAGE_SIZE } from '@/api'
+import { calcSuggestedPrice } from '@/utils/format'
 import type { Category, ProductSKU, ProductSPU, PriceMethod } from '@/types'
 
 const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
 const page = ref(1)
-const pageSize = 10
+const pageSize = PAGE_SIZE
 const keyword = ref('')
-const categoryPath = ref<Array<string | number>>([])
+const categoryPath = ref<string | number | null>(null)
 const categoryTree = ref<Category[]>([])
-const spuList = ref<ProductSPU[]>([])
+const rows = ref<ProductSPU[]>([])
+const total = ref(0)
 const skuMap = ref<Record<number, ProductSKU[]>>({})
+const expandedKeys = ref<number[]>([])
+
+/** 点击行内空白处切换展开（点击左侧展开箭头时跳过，避免双重切换） */
+function toggleExpand(id: number) {
+  const idx = expandedKeys.value.indexOf(id)
+  if (idx >= 0) expandedKeys.value.splice(idx, 1)
+  else expandedKeys.value.push(id)
+}
+
+const rowProps = (row: ProductSPU) => ({
+  style: 'cursor: pointer',
+  onClick: (e: MouseEvent) => {
+    if ((e.target as HTMLElement).closest?.('.n-data-table-expand-trigger')) return
+    toggleExpand(row.id)
+  },
+})
 
 const priceMethodOptions = [
   { label: '百分比 (%)', value: 'percent' },
@@ -76,60 +97,25 @@ function mapCategories(nodes: Category[]): any[] {
   }))
 }
 
-function flattenCategories(nodes: Category[], map: Record<number, string> = {}): Record<number, string> {
+/** 分类 id → 完整父路径（如 "辛香料 / 八角"），基于 GET /categories/tree 在前端拼接 */
+function buildCatPathMap(nodes: Category[], prefix = '', map: Record<number, string> = {}): Record<number, string> {
   for (const n of nodes) {
-    map[n.id] = n.name
-    if (n.children) flattenCategories(n.children, map)
+    const path = prefix ? `${prefix} / ${n.name}` : n.name
+    map[n.id] = path
+    if (n.children) buildCatPathMap(n.children, path, map)
   }
   return map
 }
 
-const categoryMap = ref<Record<number, string>>({})
+const categoryPathMap = computed<Record<number, string>>(() => buildCatPathMap(categoryTree.value))
 
 function selectedCategoryId(): number | null {
-  const path = categoryPath.value
-  return path?.length ? Number(path[path.length - 1]) : null
+  // 单选 n-cascader 的 value 是叶子分类 id（非路径数组）
+  return categoryPath.value == null ? null : Number(categoryPath.value)
 }
-
-function collectCategoryIds(nodes: Category[], parentId: number, out: Set<number>): void {
-  for (const n of nodes) {
-    if (n.id === parentId) {
-      const walk = (node: Category) => {
-        out.add(node.id)
-        node.children?.forEach(walk)
-      }
-      walk(n)
-      return
-    }
-    if (n.children) collectCategoryIds(n.children, parentId, out)
-  }
-}
-
-const filteredProducts = computed(() => {
-  const catId = selectedCategoryId()
-  let allowed: Set<number> | null = null
-  if (catId) {
-    allowed = new Set<number>()
-    collectCategoryIds(categoryTree.value, catId, allowed)
-  }
-  const kw = keyword.value.trim().toLowerCase()
-  return spuList.value.filter((s) => {
-    if (allowed && !allowed.has(s.category_id ?? -1)) return false
-    if (kw && !s.name.toLowerCase().includes(kw) && !s.code.toLowerCase().includes(kw)) return false
-    return true
-  })
-})
-
-const total = computed(() => filteredProducts.value.length)
-const pagedProducts = computed(() =>
-  filteredProducts.value.slice((page.value - 1) * pageSize, page.value * pageSize),
-)
 
 function suggestedPrice(sku: ProductSKU): number {
-  const base = Number(sku.cost_price) || 0
-  const value = Number(sku.price_value) || 0
-  const raw = sku.price_method === 'amount' ? base + value : base * (1 + value / 100)
-  return Math.max(raw, 0)
+  return calcSuggestedPrice(sku)
 }
 
 function specsLabel(sku: ProductSKU): string {
@@ -188,11 +174,11 @@ const skuColumns = computed<DataTableColumns<ProductSKU>>(() => [
 
 const productColumns = computed<DataTableColumns<ProductSPU>>(() => [
   { type: 'expand', title: '', width: 48, renderExpand: (row) => renderSkuPanel(row) },
-  { title: '商品编码', key: 'code', width: 130 },
+  { title: '商品编码', key: 'code', width: 170, ellipsis: { tooltip: true } },
   { title: '商品名称', key: 'name', ellipsis: { tooltip: true }, minWidth: 160 },
   {
-    title: '分类', key: 'category_id', width: 140,
-    render: (r) => categoryMap.value[r.category_id ?? 0] || '—',
+    title: '分类', key: 'category_id', width: 180, ellipsis: { tooltip: true },
+    render: (r) => categoryPathMap.value[r.category_id ?? 0] || '—',
   },
   {
     title: 'SKU 数', key: 'sku_count', width: 80,
@@ -203,10 +189,10 @@ const productColumns = computed<DataTableColumns<ProductSPU>>(() => [
 function renderSkuPanel(row: ProductSPU) {
   const skus = skuMap.value[row.id] || []
   if (!skus.length) {
-    return h('div', { style: 'padding:12px;color:#909399' }, '该商品暂无 SKU')
+    return h('div', { style: 'padding:12px;color:var(--text-3)' }, '该商品暂无 SKU')
   }
   return h('div', { style: 'padding: 8px 8px 8px 32px' }, [
-    h('div', { style: 'font-size:12px;color:#909399;margin-bottom:6px' }, `商品：${row.name}`),
+    h('div', { style: 'font-size:12px;color:var(--text-3);margin-bottom:6px' }, `商品：${row.name}`),
     h(NDataTable, {
       columns: skuColumns.value,
       data: skus,
@@ -217,30 +203,44 @@ function renderSkuPanel(row: ProductSPU) {
   ])
 }
 
-async function loadPageSkus() {
-  const rows = pagedProducts.value
-  const entries = await Promise.all(rows.map(async (row) => [row.id, await productApi.skus(row.id)] as const))
-  const map: Record<number, ProductSKU[]> = {}
-  for (const [id, skus] of entries) map[id] = skus
-  skuMap.value = map
-}
-
-async function applyFilters() {
-  page.value = 1
+/** 服务端分页：GET /spus 支持 keyword/category_id（含子孙分类）/page/page_size，统一 page_size=20 */
+async function reload() {
   loading.value = true
   try {
+    const spuPage = await productApi.spusPage({
+      keyword: keyword.value || undefined,
+      category_id: selectedCategoryId() ?? undefined,
+      page: page.value,
+      page_size: pageSize,
+    })
+    rows.value = spuPage.items
+    total.value = spuPage.total
     await loadPageSkus()
   } finally {
     loading.value = false
   }
 }
 
+/** 仅加载当前页各 SPU 的 SKU（展开面板与 SKU 数列） */
+async function loadPageSkus() {
+  const entries = await Promise.all(rows.value.map(async (row) => [row.id, await productApi.skus(row.id)] as const))
+  const map: Record<number, ProductSKU[]> = {}
+  for (const [id, skus] of entries) map[id] = skus
+  skuMap.value = map
+}
+
+/** 筛选条件变化：回到第一页再查询 */
+function applyFilters() {
+  page.value = 1
+  reload()
+}
+
 function resetFilters() {
   keyword.value = ''
-  categoryPath.value = []
+  categoryPath.value = null
   page.value = 1
   skuMap.value = {}
-  loadPageSkus()
+  reload()
 }
 
 async function saveSku(sku: ProductSKU) {
@@ -260,11 +260,8 @@ async function saveSku(sku: ProductSKU) {
 onMounted(async () => {
   loading.value = true
   try {
-    const [spus, cats] = await Promise.all([productApi.spus(), categoryApi.tree()])
-    spuList.value = spus
-    categoryTree.value = cats
-    categoryMap.value = flattenCategories(cats)
-    await loadPageSkus()
+    categoryTree.value = await categoryApi.tree()
+    await reload()
   } finally {
     loading.value = false
   }

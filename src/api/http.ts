@@ -1,23 +1,17 @@
-// src/api/http.ts - Axios wrapper with auth header, error handling, mock toggle.
+// src/api/http.ts - Axios wrapper with auth header and error handling.
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import { createDiscreteApi } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
-import { mockAdapter } from '@/api/mock'
 
 const { message } = createDiscreteApi(['message'])
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
-const useMock = !import.meta.env.VITE_API_BASE_URL
 
 export const http: AxiosInstance = axios.create({
   baseURL,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
-
-if (useMock) {
-  http.defaults.adapter = mockAdapter
-}
 
 http.interceptors.request.use((config) => {
   const auth = useAuthStore()

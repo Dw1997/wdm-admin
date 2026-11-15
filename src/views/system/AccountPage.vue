@@ -18,6 +18,7 @@
         <n-form-item label="用户名"><n-input v-model:value="form.username" :disabled="!!form.id" placeholder="3-64 位" /></n-form-item>
         <n-form-item v-if="!form.id" label="初始密码"><n-input v-model:value="form.password" type="password" show-password-on="click" placeholder="至少 6 位" /></n-form-item>
         <n-form-item label="姓名"><n-input v-model:value="form.real_name" /></n-form-item>
+        <n-form-item label="手机号"><n-input v-model:value="form.phone" placeholder="移动端登录手机号" /></n-form-item>
         <n-form-item label="角色">
           <n-select v-model:value="form.role_id" :options="roleOptions" placeholder="选择角色" />
         </n-form-item>
@@ -44,19 +45,21 @@
 
 <script setup lang="ts">
 import { h, ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { NButton, NTag, NPopconfirm, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
 import { accountApi, roleApi } from '@/api'
 import { formatDate } from '@/utils/format'
 import type { SystemAccount, RoleConfig } from '@/types'
 
 const message = useMessage()
+const router = useRouter()
 const accounts = ref<SystemAccount[]>([])
 const roles = ref<RoleConfig[]>([])
 const loading = ref(false)
 const saving = ref(false)
 const keyword = ref('')
 const editVisible = ref(false)
-const form = reactive<any>({ id: 0, username: '', password: '', real_name: '', role_id: null, is_active: true })
+const form = reactive<any>({ id: 0, username: '', password: '', real_name: '', phone: '', role_id: null, is_active: true })
 
 const passwordVisible = ref(false)
 const passwordSaving = ref(false)
@@ -64,17 +67,20 @@ const passwordAccount = ref<SystemAccount | null>(null)
 const newPassword = ref('')
 const confirmPassword = ref('')
 
-const roleOptions = computed<SelectOption[]>(() => roles.value.map((r) => ({ label: `${r.name} (${r.code})`, value: r.id, disabled: !r.is_active })))
+const roleOptions = computed<SelectOption[]>(() => roles.value.filter((r) => r.code !== 'sales').map((r) => ({ label: `${r.name} (${r.code})`, value: r.id, disabled: !r.is_active })))
 
 const columns = computed<DataTableColumns<SystemAccount>>(() => [
   { title: 'ID', key: 'id', width: 60 },
   { title: '用户名', key: 'username', width: 130 },
   { title: '姓名', key: 'real_name', width: 110, render: (r) => r.real_name || '—' },
-  { title: '角色', key: 'role_name', width: 140, render: (r) => h('div', [r.role_name, h('div', { style: 'font-size:12px;color:#909399' }, r.role_code)]) },
+  { title: '手机号', key: 'phone', width: 130, render: (r) => r.phone || '—' },
+  { title: '角色', key: 'role_name', width: 140, render: (r) => h('div', [r.role_name, h('div', { style: 'font-size:12px;color:var(--text-3)' }, r.role_code)]) },
   { title: '平台', key: 'platform', width: 110, render: (r) => h(NTag, { size: 'small', type: r.platform === 'web' ? 'primary' : 'warning' }, { default: () => r.platform === 'web' ? 'Web 管理端' : '销售端' }) },
   { title: '状态', key: 'is_active', width: 70, render: (r) => h(NTag, { size: 'small', type: r.is_active ? 'success' : 'error' }, { default: () => r.is_active ? '启用' : '禁用' }) },
   { title: '最后登录', key: 'last_login_at', width: 150, render: (r) => r.last_login_at ? formatDate(r.last_login_at) : '—' },
-  { title: '操作', key: 'actions', width: 190, render: (r) => h('div', [
+  { title: '操作', key: 'actions', width: 190, render: (r) => r.role_code === 'sales'
+    ? h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => router.push('/sales/list') }, { default: () => '销售管理' })
+    : h('div', [
     h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
     h(NButton, { size: 'small', text: true, type: 'primary', style: 'margin-left:8px', onClick: () => openPassword(r) }, { default: () => '重置密码' }),
     h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, {
@@ -94,12 +100,12 @@ async function loadRoles() {
 }
 
 function openCreate() {
-  Object.assign(form, { id: 0, username: '', password: '', real_name: '', role_id: roles.value.find((r) => r.is_active)?.id ?? null, is_active: true })
+  Object.assign(form, { id: 0, username: '', password: '', real_name: '', phone: '', role_id: roles.value.find((r) => r.is_active && r.code !== 'sales')?.id ?? null, is_active: true })
   editVisible.value = true
 }
 
 function openEdit(r: SystemAccount) {
-  Object.assign(form, { id: r.id, username: r.username, password: '', real_name: r.real_name || '', role_id: r.role_id, is_active: r.is_active })
+  Object.assign(form, { id: r.id, username: r.username, password: '', real_name: r.real_name || '', phone: r.phone || '', role_id: r.role_id, is_active: r.is_active })
   editVisible.value = true
 }
 
@@ -115,10 +121,10 @@ async function onSave() {
   saving.value = true
   try {
     if (form.id) {
-      await accountApi.update(form.id, { real_name: form.real_name || null, role_id: form.role_id, is_active: form.is_active })
+      await accountApi.update(form.id, { real_name: form.real_name || null, phone: form.phone || null, role_id: form.role_id, is_active: form.is_active })
       message.success('已更新')
     } else {
-      await accountApi.create({ username: form.username, password: form.password, real_name: form.real_name || null, role_id: form.role_id, is_active: form.is_active })
+      await accountApi.create({ username: form.username, password: form.password, real_name: form.real_name || null, phone: form.phone || null, role_id: form.role_id, is_active: form.is_active })
       message.success('已创建')
     }
     editVisible.value = false

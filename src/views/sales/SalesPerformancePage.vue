@@ -35,7 +35,7 @@ const ranking = ref<SalesRankingItem[]>([]); const loading = ref(false)
 const commissions = ref<Commission[]>([])
 
 const summary = computed(() => [
-  { key: 'gmv', label: '团队GMV', value: `¥${formatQty(ranking.value.reduce((s, r) => s + r.gmv, 0))}`, color: 'linear-gradient(135deg,#dc2626,#ef4444)', icon: '💰' },
+  { key: 'gmv', label: '团队GMV', value: `¥${formatQty(ranking.value.reduce((s, r) => s + r.gmv, 0))}`, color: 'linear-gradient(135deg,#4f46e5,#818cf8)', icon: '💰' },
   { key: 'order', label: '订单数', value: formatQty(ranking.value.reduce((s, r) => s + r.order_count, 0)), color: 'linear-gradient(135deg,#16a34a,#22c55e)', icon: '📋' },
   { key: 'new', label: '新增客户', value: formatQty(ranking.value.reduce((s, r) => s + r.new_customers, 0)), color: 'linear-gradient(135deg,#ea580c,#f59e0b)', icon: '👥' },
   { key: 'comm', label: '团队提成', value: `¥${formatQty(ranking.value.reduce((s, r) => s + r.estimated_commission, 0))}`, color: 'linear-gradient(135deg,#7c3aed,#a855f7)', icon: '🏆' },
@@ -47,7 +47,7 @@ const columns = computed<DataTableColumns<SalesRankingItem>>(() => [
   { title: '订单数', key: 'order_count', width: 80 },
   { title: 'GMV', key: 'gmv', width: 120, render: (r) => `¥${formatQty(r.gmv)}` },
   { title: '提成', key: 'estimated_commission', width: 120, render: (r) => h('span', { style: 'color:#ea580c' }, `¥${formatQty(r.estimated_commission)}`) },
-  { title: '占比', key: 'pct', render: (r) => { const max = Math.max(...ranking.value.map(x => x.gmv), 1); const pct = Math.round((r.gmv / max) * 100); return h('div', { style: 'display:flex;align-items:center;gap:4px' }, [h('div', { style: `width:120px;height:8px;background:#f3f4f6;border-radius:4px;overflow:hidden` }, [h('div', { style: `width:${pct}%;height:100%;background:linear-gradient(90deg,#dc2626,#ef4444)` })]), h('span', { style: 'font-size:12px;color:#909399' }, `${pct}%`)]) } },
+  { title: '占比', key: 'pct', render: (r) => { const max = Math.max(...ranking.value.map(x => x.gmv), 1); const pct = Math.round((r.gmv / max) * 100); return h('div', { style: 'display:flex;align-items:center;gap:4px' }, [h('div', { style: `width:120px;height:8px;background:var(--bg-subtle);border-radius:4px;overflow:hidden` }, [h('div', { style: `width:${pct}%;height:100%;background:linear-gradient(90deg,#4f46e5,#818cf8)` })]), h('span', { style: 'font-size:12px;color:var(--text-3)' }, `${pct}%`)]) } },
 ])
 
 const commissionColumns: DataTableColumns<Commission> = [

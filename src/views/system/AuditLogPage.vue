@@ -25,10 +25,10 @@ const actionOpts = [{label:'创建',value:'create'},{label:'更新',value:'updat
 
 const columns = computed<DataTableColumns<AuditLog>>(() => [
   { title: 'ID', key: 'id', width: 60 },
-  { title: '操作人', key: 'user_name', width: 140, render: (r) => h('div', [r.user_name, h('div', { style: 'font-size:12px;color:#909399' }, r.user_role === 'admin' ? '管理员' : '销售')]) },
+  { title: '操作人', key: 'user_name', width: 140, render: (r) => h('div', [r.user_name, h('div', { style: 'font-size:12px;color:var(--text-3)' }, r.user_role === 'admin' ? '管理员' : '销售')]) },
   { title: '操作', key: 'action', width: 70, render: (r) => h(NTag, { size: 'small', type: r.action === 'create' ? 'success' : r.action === 'update' ? 'warning' : 'error' }, { default: () => { const m: Record<string,string> = { create: '创建', update: '更新', delete: '删除' }; return m[r.action] || r.action } }) },
-  { title: '目标', key: 'target_name', ellipsis: { tooltip: true }, render: (r) => h('div', [r.target_name || r.target_id, h('div', { style: 'font-size:12px;color:#909399' }, `${targetLabel(r.target_type)} · ${r.target_id}`)]) },
-  { title: '变更内容', key: 'changes', render: (r) => r.before_value || r.after_value ? h('div', { style: 'font-size:12px' }, [r.before_value ? h('div', { style: 'color:#dc2626' }, `- ${r.before_value}`) : null, r.after_value ? h('div', { style: 'color:#16a34a' }, `+ ${r.after_value}`) : null]) : h('span', { style: 'color:#909399' }, '—') },
+  { title: '目标', key: 'target_name', ellipsis: { tooltip: true }, render: (r) => h('div', [r.target_name || r.target_id, h('div', { style: 'font-size:12px;color:var(--text-3)' }, `${targetLabel(r.target_type)} · ${r.target_id}`)]) },
+  { title: '变更内容', key: 'changes', render: (r) => r.before_value || r.after_value ? h('div', { style: 'font-size:12px' }, [r.before_value ? h('div', { style: 'color:#dc2626' }, `- ${r.before_value}`) : null, r.after_value ? h('div', { style: 'color:#16a34a' }, `+ ${r.after_value}`) : null]) : h('span', { style: 'color:var(--text-3)' }, '—') },
   { title: '备注', key: 'remark', ellipsis: { tooltip: true } },
   { title: 'IP', key: 'ip_address', width: 120, render: (r) => r.ip_address || '—' },
   { title: '时间', key: 'created_at', width: 150, render: (r) => formatDate(r.created_at) },
