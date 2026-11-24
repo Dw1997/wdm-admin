@@ -47,10 +47,11 @@
 </template>
 <script setup lang="ts">
 import { h, ref, reactive, computed, onMounted } from 'vue'
-import { NButton, NTag, NSpace, NPopconfirm, useMessage, type UploadFileInfo } from 'naive-ui'
+import { NTag, useMessage, type UploadFileInfo } from 'naive-ui'
 import { Search } from '@vicons/tabler'
 import { categoryApi, uploadApi } from '@/api'
 import type { Category } from '@/types'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
 const treeData = ref<Category[]>([])
 const keyword = ref('')
@@ -70,11 +71,11 @@ function renderLabel({ option }: { option: any }) {
       !option.is_active ? h(NTag, { size: 'small', type: 'error', bordered: false, style: 'flex-shrink:0' }, { default: () => '已禁用' }) : null,
       option.children?.length ? h('span', { style: 'font-size:12px;color:var(--text-3);flex-shrink:0' }, `${option.children.length} 个子分类`) : null,
     ]),
-    h(NSpace, { size: 4, wrap: false, style: 'flex-shrink:0' }, { default: () => [
-      h(NButton, { size: 'tiny', text: true, type: 'primary', onClick: (e: Event) => { e.stopPropagation(); openCreate(option) } }, { default: () => '添加子分类' }),
-      h(NButton, { size: 'tiny', text: true, type: 'primary', onClick: (e: Event) => { e.stopPropagation(); openEdit(option) } }, { default: () => '编辑' }),
-      h(NPopconfirm, { onPositiveClick: () => onDelete(option) }, { default: () => '确认删除?', trigger: () => h(NButton, { size: 'tiny', text: true, type: 'error', onClick: (e: Event) => e.stopPropagation() }, { default: () => '删除' }) }),
-    ] }),
+    actionBar([
+      actionIcon({ icon: 'add', label: '添加子分类', size: 16, stopPropagation: true, onClick: () => openCreate(option) }),
+      actionIcon({ icon: 'edit', label: '编辑', size: 16, stopPropagation: true, onClick: () => openEdit(option) }),
+      actionIcon({ icon: 'delete', label: '删除', size: 16, stopPropagation: true, confirm: '确认删除?', onClick: () => onDelete(option) }),
+    ], { stopPropagation: true, gap: 8 }),
   ])
 }
 

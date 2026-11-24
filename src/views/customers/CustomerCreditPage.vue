@@ -1,11 +1,11 @@
 <template>
-  <div class="page-container">
-    <div class="card-section">
+  <div class="page-container credit-page">
+    <div class="card-section credit-card">
       <div class="page-header">
         <h2 class="page-title">客户额度</h2>
         <n-tag v-if="pendingCount" type="warning">待审批调额申请 {{ pendingCount }} 条</n-tag>
       </div>
-      <n-tabs v-model:value="tab" type="line" @update:value="onTabChange">
+      <n-tabs v-model:value="tab" type="line" class="credit-tabs" @update:value="onTabChange">
         <n-tab-pane name="credit" tab="客户额度">
           <div class="filter-bar">
             <n-input v-model:value="keyword" placeholder="客户名称 / 手机号" clearable style="width: 220px" @keyup.enter="search" />
@@ -14,9 +14,13 @@
             <n-select v-model:value="sourceFilter" placeholder="额度来源" clearable style="width: 140px" :options="sourceOpts" @update:value="search" />
             <n-button type="primary" size="small" @click="search">查询</n-button>
           </div>
-          <n-data-table :columns="creditColumns" :data="pagedList" :loading="loading" :bordered="false" size="small" :scroll-x="1100" :row-key="(r: AdminCustomer) => r.id" />
-          <div class="pagination-bar">
-            <n-pagination v-model:page="page" :item-count="list.length" :page-size="pageSize" />
+          <div v-if="checkedRowKeys.length" class="batch-bar">
+            <span class="batch-count">已勾选 <strong>{{ checkedRowKeys.length }}</strong> 位客户</span>
+            <n-button size="small" type="primary" secondary @click="openBatchSet">批量设置额度</n-button>
+            <n-button size="small" text @click="checkedRowKeys = []">取消勾选</n-button>
+          </div>
+          <div class="table-wrap">
+            <n-data-table v-model:checked-row-keys="checkedRowKeys" :columns="creditColumns" :data="pagedList" :loading="loading" :bordered="false" size="small" :scroll-x="1100" flex-height style="height: 100%" :row-key="(r: AdminCustomer) => r.id" />
           </div>
         </n-tab-pane>
 
@@ -24,10 +28,44 @@
           <div class="filter-bar">
             <n-select v-model:value="appStatus" style="width: 140px" :options="appStatusOpts" @update:value="loadApplications" />
           </div>
-          <n-data-table :columns="appColumns" :data="applications" :loading="appLoading" :bordered="false" size="small" :scroll-x="1100" />
+          <div class="table-wrap">
+            <n-data-table :columns="appColumns" :data="applications" :loading="appLoading" :bordered="false" size="small" :scroll-x="1100" flex-height style="height: 100%" />
+          </div>
         </n-tab-pane>
       </n-tabs>
     </div>
+
+    <div v-if="tab === 'credit'" class="pagination-footer">
+      <span class="result-count">共 {{ list.length }} 位客户</span>
+      <n-pagination v-model:page="page" :item-count="list.length" :page-size="pageSize" />
+    </div>
+
+    <!-- 批量设置额度 -->
+    <n-modal v-model:show="batchVisible" title="批量设置额度" preset="card" style="width: 520px">
+      <n-form label-placement="left" label-width="100">
+        <n-form-item label="已选客户"><span>共 {{ checkedRowKeys.length }} 位</span></n-form-item>
+        <n-form-item label="额度方式">
+          <n-radio-group v-model:value="batchForm.mode">
+            <n-radio-button value="level">跟随等级</n-radio-button>
+            <n-radio-button value="custom">统一单独额度</n-radio-button>
+          </n-radio-group>
+        </n-form-item>
+        <n-form-item v-if="batchForm.mode === 'custom'" label="单独额度">
+          <n-input-number v-model:value="batchForm.credit_limit" :min="0" :step="1000" style="width: 220px">
+            <template #suffix>元</template>
+          </n-input-number>
+          <span style="margin-left: 8px; color: #999">0 表示不允许欠款</span>
+        </n-form-item>
+        <n-form-item label="变更原因" required>
+          <n-input v-model:value="batchForm.reason" placeholder="会写进每位客户的额度变动记录" />
+        </n-form-item>
+      </n-form>
+      <div class="batch-hint">跟随等级 = 各客户按自己等级的默认额度；账期不变；额度改动只影响之后送达的订单。</div>
+      <template #footer>
+        <n-button @click="batchVisible = false">取消</n-button>
+        <n-button type="primary" :loading="batchSaving" @click="onBatchSet">确定</n-button>
+      </template>
+    </n-modal>
 
     <!-- 设置额度 -->
     <n-modal v-model:show="setVisible" title="设置额度与账期" preset="card" style="width: 640px">
@@ -132,6 +170,11 @@ const logs = ref<CreditLog[]>([])
 const logsLoading = ref(false)
 const setForm = reactive<any>({ mode: 'level', credit_limit: 1000, payment_term_type: 'days', term_days: 30, monthly_due_day: 10, credit_note: '', reason: '' })
 
+const checkedRowKeys = ref<number[]>([])
+const batchVisible = ref(false)
+const batchSaving = ref(false)
+const batchForm = reactive<any>({ mode: 'custom', credit_limit: 1000, reason: '' })
+
 const applications = ref<CreditApplication[]>([])
 const appLoading = ref(false)
 const appStatus = ref('pending')
@@ -165,6 +208,7 @@ function termText(r: AdminCustomer) {
 }
 
 const creditColumns = computed<DataTableColumns<AdminCustomer>>(() => [
+  { type: 'selection', disabled: (r) => !!r.is_system },
   { title: '客户', key: 'name', width: 150, ellipsis: { tooltip: true }, render: (r) => `${r.name}${r.phone ? `（${r.phone}）` : ''}` },
   { title: '归属销售', key: 'sales_name', width: 110, render: (r) => r.sales_name ? (r.sales_is_admin ? `管理员·${r.sales_name}` : r.sales_name) : '—' },
   { title: '客户等级', key: 'level_nickname', width: 110, render: (r) => r.level_nickname || '—' },
@@ -237,6 +281,7 @@ const limitChanged = computed(() => {
 
 function search() {
   page.value = 1
+  checkedRowKeys.value = []
   reload()
 }
 
@@ -323,6 +368,57 @@ async function onSaveCredit() {
   } finally { saving.value = false }
 }
 
+/** 批量：分片并发跑，返回成功数与失败 id */
+async function runBatch(ids: number[], task: (id: number) => Promise<unknown>): Promise<{ ok: number; failedIds: number[] }> {
+  let ok = 0
+  const failedIds: number[] = []
+  const chunkSize = 5
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const results = await Promise.allSettled(chunk.map((id) => task(id)))
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled') ok += 1
+      else failedIds.push(chunk[idx])
+    })
+  }
+  return { ok, failedIds }
+}
+
+function openBatchSet() {
+  Object.assign(batchForm, { mode: 'custom', credit_limit: 1000, reason: '' })
+  batchVisible.value = true
+}
+
+async function onBatchSet() {
+  if (!checkedRowKeys.value.length) return
+  if (batchForm.mode === 'custom' && batchForm.credit_limit == null) {
+    message.warning('请填写单独额度')
+    return
+  }
+  if (!batchForm.reason.trim()) {
+    message.warning('请填写变更原因')
+    return
+  }
+  const payload: any = {
+    credit_limit: batchForm.mode === 'level' ? null : batchForm.credit_limit,
+    reason: batchForm.reason.trim(),
+  }
+  const ids = [...checkedRowKeys.value]
+  batchSaving.value = true
+  try {
+    const { ok, failedIds } = await runBatch(ids, (id) => adminCustomerApi.setCredit(id, payload))
+    if (failedIds.length === 0) {
+      message.success(`已批量设置 ${ok} 位客户的额度`)
+      batchVisible.value = false
+      checkedRowKeys.value = []
+    } else {
+      message.warning(`成功 ${ok} 位，失败 ${failedIds.length} 位`)
+      checkedRowKeys.value = failedIds
+    }
+    reload()
+  } finally { batchSaving.value = false }
+}
+
 function openReview(r: CreditApplication, approve: boolean) {
   reviewTarget.value = r
   reviewApprove.value = approve
@@ -359,3 +455,90 @@ onMounted(async () => {
   loadPendingCount()
 })
 </script>
+
+<style scoped>
+/* 筛选栏常驻顶部、翻页条常驻底部，只有表格主体滚动（表头跟着固定） */
+.credit-page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+.credit-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.credit-card .page-header { flex-shrink: 0; }
+.credit-tabs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.credit-tabs :deep(.n-tabs-nav) { flex-shrink: 0; }
+.credit-tabs :deep(.n-tabs-pane-wrapper) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.credit-tabs :deep(.n-tab-pane) {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.credit-tabs :deep(.filter-bar) {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+.batch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+  padding: 8px 12px;
+  background: var(--primary-soft);
+  border-radius: 8px;
+}
+.batch-count {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-right: 4px;
+}
+.batch-hint {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: -8px;
+  text-align: center;
+}
+.table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.pagination-footer {
+  flex-shrink: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 -2px 10px rgba(15, 23, 42, 0.06);
+}
+.result-count {
+  font-size: 12px;
+  color: var(--text-3);
+}
+</style>

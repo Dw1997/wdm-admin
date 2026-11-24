@@ -73,7 +73,11 @@
           </n-tab-pane>
         </n-tabs>
       </div>
-      <n-layout-content class="content" :class="{ 'sales-dashboard-content': route.name === 'sales-dashboard' }" :native-scrollbar="false">
+      <n-layout-content
+        class="content"
+        :class="{ 'full-height-content': route.name === 'sales-dashboard' || route.name === 'sales-commission-settings' || route.name === 'finance-credit-settle' || route.name === 'customers-list' || route.name === 'customers-credit' || route.name === 'order-center-list' }"
+        :native-scrollbar="false"
+      >
         <router-view v-slot="{ Component, route }">
           <transition name="fade" mode="out-in">
             <component :is="Component" :key="route.fullPath" />
@@ -133,20 +137,23 @@ function renderIcon(icon: any) {
   return () => h(NIcon, null, { default: () => h(icon) })
 }
 
-const menuOptions = [
+const isAdmin = computed(() => !auth.user || auth.user.role === 'admin')
+
+const menuOptions = computed(() => [
   { label: '数据看板', key: '/dashboard', icon: renderIcon(Dashboard) },
   {
     label: '订单中心', key: 'order-center', icon: renderIcon(ClipboardPlus), children: [
       { label: '门店零售', key: '/order-center/counter', icon: renderIcon(ShoppingCart) },
       { label: '录单', key: '/order-center/create', icon: renderIcon(Plus) },
       { label: '订单列表', key: '/order-center/list', icon: renderIcon(ClipboardList) },
+      ...(isAdmin.value ? [{ label: '订单审批', key: '/order-center/approvals', icon: renderIcon(ShieldCheck) }] : []),
       { label: '退货单', key: '/order-center/refund', icon: renderIcon(ReceiptRefund) },
-      { label: '打印中心', key: '/order-center/picking', icon: renderIcon(Printer) },
+      // 打印中心只有管理员可用（print.documents）
+      ...(isAdmin.value ? [{ label: '打印中心', key: '/order-center/print', icon: renderIcon(Printer) }] : []),
     ],
   },
   {
     label: '商品中心', key: 'spus', icon: renderIcon(ShoppingCart), children: [
-      { label: '商品看板', key: '/spus/dashboard', icon: renderIcon(TrendingUp) },
       { label: '新建商品', key: '/spus/create', icon: renderIcon(Plus) },
       { label: '商品管理', key: '/spus/list', icon: renderIcon(Package) },
       { label: '分类管理', key: '/spus/categories', icon: renderIcon(Tags) },
@@ -161,15 +168,10 @@ const menuOptions = [
     ],
   },
   {
-    label: '供应商', key: 'suppliers', icon: renderIcon(BuildingFactory), children: [
-      { label: '供应商看板', key: '/suppliers/dashboard', icon: renderIcon(TrendingUp) },
-      { label: '供应商列表', key: '/suppliers/list', icon: renderIcon(Package) },
-      { label: '供应商往来', key: '/suppliers/transactions', icon: renderIcon(Wallet) },
-    ],
-  },
-  {
-    label: '库存管理', key: 'inventory', icon: renderIcon(Package), children: [
+    label: '进货管理', key: 'inventory', icon: renderIcon(BuildingFactory), children: [
       { label: '采购入库', key: '/inventory/purchases', icon: renderIcon(ClipboardList) },
+      { label: '库存查询', key: '/inventory/stocks', icon: renderIcon(Package) },
+      { label: '供应商管理', key: '/suppliers/list', icon: renderIcon(BuildingCommunity) },
     ],
   },
   {
@@ -177,29 +179,31 @@ const menuOptions = [
       { label: '客户列表', key: '/customers/list', icon: renderIcon(Users) },
       { label: '客户额度', key: '/customers/credit', icon: renderIcon(Wallet) },
       { label: '客户审核', key: '/customers/audit', icon: renderIcon(UserCheck) },
-      { label: '客户等级', key: '/customers/levels', icon: renderIcon(Medal) },
+      { label: '客户标签', key: '/customers/tags', icon: renderIcon(Tags) },
+      { label: '优惠券管理', key: '/customers/coupons', icon: renderIcon(Medal) },
     ],
   },
   {
     label: '配送管理', key: 'delivery', icon: renderIcon(Truck), children: [
       { label: '安排出车', key: '/delivery/trips', icon: renderIcon(Truck) },
-      { label: '待排车订单', key: '/delivery/pool', icon: renderIcon(ClipboardList) },
-      { label: '零担发货', key: '/delivery/freight', icon: renderIcon(Package) },
-      { label: '地点设置 / 常用路线', key: '/delivery/places', icon: renderIcon(MapPin) },
-      { label: '零担线路', key: '/delivery/freight-lines', icon: renderIcon(Route) },
+      { label: '待送货订单', key: '/delivery/pool', icon: renderIcon(ClipboardList) },
+      { label: '路线设置', key: '/delivery/places', icon: renderIcon(MapPin) },
+      { label: '物流路线', key: '/delivery/freight-lines', icon: renderIcon(Route) },
     ],
   },
   {
     label: '销售管理', key: 'sales', icon: renderIcon(BuildingCommunity), children: [
       { label: '销售看板', key: '/sales/dashboard', icon: renderIcon(TrendingUp) },
       { label: '销售列表', key: '/sales/list', icon: renderIcon(UserCircle) },
+      { label: '提成设置', key: '/sales/commission-settings', icon: renderIcon(ChartLine) },
     ],
   },
   {
     label: '财务结算', key: 'finance', icon: renderIcon(Cash), children: [
-      { label: '收支流水', key: '/finance/payments', icon: renderIcon(Cash) },
       { label: '销售提成', key: '/finance/commissions', icon: renderIcon(Coin) },
       { label: '客户账期', key: '/finance/credit', icon: renderIcon(Wallet) },
+      { label: '支付记录', key: '/finance/payments', icon: renderIcon(Cash) },
+      { label: '供应商往来', key: '/suppliers/transactions', icon: renderIcon(BuildingFactory) },
       { label: '成本中心', key: '/finance/cost-center', icon: renderIcon(FileInvoice) },
     ],
   },
@@ -210,7 +214,7 @@ const menuOptions = [
       { label: '操作审计', key: '/system/audit-logs', icon: renderIcon(FileSearch) },
     ],
   },
-]
+])
 
 const searchOptions = computed(() => {
   const options: { label: string; value: string }[] = []
@@ -223,7 +227,7 @@ const searchOptions = computed(() => {
       }
     }
   }
-  walk(menuOptions)
+  walk(menuOptions.value as { label: string; key: string; children?: unknown[] }[])
   return options
 })
 
@@ -244,10 +248,12 @@ const activeKey = computed(() => {
   if (p.startsWith('/prices')) return p === '/prices' ? '/prices/suggested' : p
   if (p.startsWith('/suppliers')) return p === '/suppliers' ? '/suppliers/list' : p
   if (p.startsWith('/customers')) return p === '/customers' ? '/customers/list' : p
+  if (p.startsWith('/delivery/trips')) return '/delivery/trips'
   if (p.startsWith('/delivery')) return p === '/delivery' ? '/delivery/trips' : p
-  if (p.startsWith('/sales')) return p === '/sales' || p === '/sales/new' ? '/sales/list' : p
+  if (p.startsWith('/sales')) return p === '/sales' ? '/sales/list' : p
   if (p.startsWith('/order-center')) return p === '/order-center' ? '/order-center/list' : p
-  if (p.startsWith('/finance')) return p === '/finance' ? '/finance/payments' : p
+  if (p.startsWith('/finance/credit')) return '/finance/credit'
+  if (p.startsWith('/finance')) return p === '/finance' ? '/finance/credit' : p
   if (p.startsWith('/system')) return p === '/system' ? '/system/audit-logs' : p
   return p
 })
@@ -383,7 +389,7 @@ watch(() => route.fullPath, () => tabStore.open(route), { immediate: true })
 :deep(.main-scroll) { display: flex; flex-direction: column; overflow: hidden; }
 .header, .tab-bar { flex-shrink: 0; }
 .content { flex: 1; min-height: 0; padding: 0; background: var(--bg-page); }
-.sales-dashboard-content :deep(.n-scrollbar-content) { height: 100%; min-height: 0; }
+.full-height-content :deep(.n-scrollbar-content) { height: 100%; min-height: 0; }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.15s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 </style>

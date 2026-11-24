@@ -126,12 +126,37 @@ export interface Customer {
   remark?: string
 }
 
-export type CustomerChannelType = 'sales' | 'self_use'
+export interface CustomerTag {
+  id: number
+  name: string
+  level_id?: number | null
+  level_code?: string | null
+  level_nickname?: string | null
+  customer_count?: number
+  sort_order: number
+  is_active: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface CustomerTagPayload {
+  name: string
+  level_id?: number | null
+  sort_order?: number
+  is_active?: boolean
+}
+
+export interface ApplicableTagItem {
+  id: number
+  name: string
+}
 
 export interface AdminCustomer {
   id: number
   name: string
-  channel_type: CustomerChannelType
+  tag_id?: number | null
+  tag_name?: string | null
+  is_system?: boolean
   /** 单独额度；null 表示跟随所在等级的默认额度（改额度走 PUT /customers/{id}/credit） */
   credit_limit?: string | null
   /** 生效额度 = 单独额度 ?? 等级默认额度 */
@@ -160,12 +185,16 @@ export interface AdminCustomer {
   sales_name?: string | null
   /** 归属账号是管理员（自来客） */
   sales_is_admin: boolean
+  /** 关联供应商ID（既是客户又是供应商时用于两本账抵账） */
+  vendor_id?: number | null
   default_delivery_mode?: 'route' | 'freight' | 'local'
   delivery_region_id?: number | null
   freight_line_id?: number | null
-  freight_stop_id?: number | null
   default_freight_mode?: 'deduct' | 'store_paid' | 'customer_paid'
   invite_code?: string | null
+  referrer_customer_id?: number | null
+  referrer_customer_name?: string | null
+  referred_at?: string | null
   address?: string | null
   province?: string | null
   city?: string | null
@@ -174,6 +203,7 @@ export interface AdminCustomer {
   detail_address?: string | null
   created_at?: string
   updated_at?: string
+  warnings?: ApiWarning[]
 }
 
 /** POST /customers：内部账号新建客户，不带 unionid / openid（customers.md） */
@@ -182,9 +212,15 @@ export interface CustomerCreatePayload {
   phone: string
   contact_name?: string | null
   contact_phone?: string | null
+  /** 客户类型标签 ID（单选，可空，与等级价格无关） */
+  tag_id?: number | null
+  /** 关联供应商 ID（仅管理员，可空） */
+  vendor_id?: number | null
   /** 仅管理员有效；不传归当前账号 */
   sales_id?: number | null
-  /** 仅管理员有效；传了直接分配等级并置为正常 */
+  /** 介绍人（拉新老客户）ID */
+  referrer_customer_id?: number | null
+  /** 等级价格 ID；不传自动绑定内置「默认售价」等级 */
   level_id?: number | null
   address?: string | null
   province?: string | null
@@ -195,18 +231,21 @@ export interface CustomerCreatePayload {
   default_delivery_mode?: 'route' | 'freight' | 'local'
   delivery_region_id?: number | null
   freight_line_id?: number | null
-  freight_stop_id?: number | null
   default_freight_mode?: 'deduct' | 'store_paid' | 'customer_paid'
 }
 
 export interface CustomerUpdatePayload {
   name?: string
-  channel_type?: CustomerChannelType
+  tag_id?: number | null
+  vendor_id?: number | null
   contact_name?: string | null
   contact_phone?: string | null
   phone?: string
   status?: AdminCustomerStatus
   invite_code?: string | null
+  referrer_customer_id?: number | null
+  referrer_customer_name?: string | null
+  referred_at?: string | null
   address?: string | null
   province?: string | null
   city?: string | null
@@ -216,7 +255,6 @@ export interface CustomerUpdatePayload {
   default_delivery_mode?: 'route' | 'freight' | 'local'
   delivery_region_id?: number | null
   freight_line_id?: number | null
-  freight_stop_id?: number | null
   default_freight_mode?: 'deduct' | 'store_paid' | 'customer_paid'
 }
 
@@ -280,8 +318,27 @@ export interface CreditApplicationResult {
 export interface CustomerAuditPayload {
   approved: boolean
   level_id?: number | null
+  tag_id?: number | null
   sales_id?: number | null
+  name?: string
+  contact_name?: string
+  delivery_region_id?: number | null
+  default_delivery_mode?: 'route' | 'freight' | 'local'
+  address?: string
+  detail_address?: string
+  referrer_customer_id?: number | null
   reason?: string
+}
+
+/** GET /promotion/qrcode：销售/管理员推广微信小程序码 */
+export interface PromotionQrcode {
+  account_id?: number | null
+  account_name?: string
+  invite_code: string
+  scene: string
+  invite_url: string
+  qrcode_url: string
+  unavailable_reason?: string | null
 }
 
 /** GET /customers/sales-options：可选归属销售（销售和管理员账号） */
@@ -408,6 +465,7 @@ export interface OrderItem {
   unit: string
   quantity: number
   unit_price: number
+  original_unit_price?: number | string | null
   subtotal: number
 }
 
@@ -429,6 +487,51 @@ export interface Order {
   audited_at?: string
   shipped_at?: string
   completed_at?: string
+  pending_price_adjustment?: PendingPriceAdjustment | null
+}
+
+export interface OrderPaymentRecord {
+  payment_id: number
+  method: 'wechat' | 'alipay' | 'cash' | 'other' | string
+  channel?: 'offline' | 'wx_miniprogram' | string
+  wx_transaction_id?: string | null
+  amount: number | string
+  received_amount?: number | string | null
+  change_amount?: number | string | null
+  rounding_amount?: number | string | null
+  paid_at: string
+  operator_name?: string | null
+}
+
+export interface PaymentRecordAllocation {
+  order_id: number
+  order_no: string
+  amount: number | string
+}
+
+export interface PaymentRecordItem {
+  id: number
+  customer_id: number
+  customer_name: string
+  amount: number | string
+  rounding_amount: number | string
+  kind: 'receipt' | 'refund' | string
+  method: 'wechat' | 'alipay' | 'cash' | 'other' | string
+  channel: 'offline' | 'wx_miniprogram' | string
+  wx_transaction_id?: string | null
+  out_trade_no?: string | null
+  paid_at: string
+  operator_name?: string | null
+  remark?: string | null
+  allocations: PaymentRecordAllocation[]
+}
+
+export interface OrderReturnSettlementRecord {
+  settlement_id: number
+  return_order_id: number
+  return_no: string
+  amount: number | string
+  created_at: string
 }
 
 /** 当前后端订单摘要与详情字段（docs/00-core/api/orders.md）。 */
@@ -450,21 +553,229 @@ export interface OrderListItem {
   delivered_amount?: number | null
   paid_amount: number
   discount_amount: number
+  customer_coupon_id?: number | null
+  coupon_name?: string | null
+  coupon_type?: CouponType | null
+  coupon_amount?: number
   returned_amount: number
+  return_settled_amount?: number
+  return_freight_cost?: number
   unpaid_amount: number
   route_trip_id?: number | null
+  route_trip_name?: string | null
+  route_trip_date?: string | null
   freight_shipment_id?: number | null
+  freight_line_id?: number | null
+  freight_line_name?: string | null
+  freight_ship_date?: string | null
+  freight_depart_time?: string | null
+  freight_town_region_id?: number | null
   freight_mode?: 'deduct' | 'store_paid' | 'customer_paid' | 'none'
   freight_cost?: number | null
+  pool_deadline?: string | null
+  remaining_hours?: number | null
+  pool_overdue?: boolean
+  has_freight_line?: boolean
+  delivery_region_id?: number | null
+  delivery_region_name?: string | null
+  auto_joined?: boolean
+  auto_moved?: boolean
   handed_over_at?: string | null
+  due_date?: string | null
   over_credit: boolean
   approval_stage?: string | null
+  reject_reason?: string | null
+  dispatch_note?: string | null
+  created_by_name?: string | null
   created_at: string
   delivered_at?: string | null
   remark?: string | null
   version: number
-  items: { id: number; sku_id: number; spu_name: string; sku_spec: string; unit: string; quantity: number; unit_price: number; amount: number; cost_price?: number | null; supplier_id?: number | null; supplier_name?: string | null; cost_status?: 'estimated' | 'actual' | null; purchase_receipt_id?: number | null }[]
+  print_count?: number
+  last_printed_at?: string | null
+  items: { id: number; sku_id: number; spu_name: string; sku_spec: string; unit: string; quantity: number; delivered_quantity?: number | string | null; returned_quantity?: number | string; restocked_quantity?: number | string; unit_price: number; original_unit_price?: number | string | null; price_source?: string; amount: number; cost_price?: number | null; supplier_id?: number | null; supplier_name?: string | null; cost_status?: 'estimated' | 'actual' | null; purchase_receipt_id?: number | null; commission_rate?: number | string | null; commission_amount?: number | string | null }[]
+  payments?: OrderPaymentRecord[]
+  return_settlements?: OrderReturnSettlementRecord[]
+  commission_amount?: number | string | null
+  goods_cost?: number | null
   profit?: number | null
+  pending_price_adjustment?: PendingPriceAdjustment | null
+  price_adjustments?: OrderPriceAdjustment[]
+}
+
+// ---------- 订单批量操作（orders.md） ----------
+export interface BatchSkipItem {
+  order_id: number
+  order_no?: string | null
+  reason: string
+}
+
+export interface BatchDeliverPayload {
+  order_ids: number[]
+  delivered_at?: string | null
+}
+
+export interface BatchDeliverResult {
+  delivered_count: number
+  order_ids: number[]
+  skipped: BatchSkipItem[]
+  warnings: ApiWarning[]
+}
+
+export interface BatchCancelPayload {
+  order_ids: number[]
+  reason?: string | null
+}
+
+export interface BatchCancelResult {
+  cancelled_count: number
+  order_ids: number[]
+  skipped: BatchSkipItem[]
+  warnings: ApiWarning[]
+}
+
+// ---------- 送达前改价审批（orders.md） ----------
+export type OrderPriceAdjustmentStatus = 'pending' | 'approved' | 'rejected'
+
+export interface OrderPriceAdjustmentItem {
+  order_item_id: number
+  spu_name: string
+  sku_spec: string
+  unit: string
+  quantity: number | string
+  old_unit_price: number | string
+  new_unit_price: number | string
+  diff_amount: number | string
+}
+
+export interface OrderPriceAdjustment {
+  id: number
+  order_id: number
+  order_no: string
+  customer_id: number
+  customer_name: string
+  sales_id: number | null
+  sales_name: string | null
+  order_status: string
+  status: OrderPriceAdjustmentStatus
+  reason: string | null
+  applicant_id: number | null
+  applicant_name: string | null
+  reviewer_id: number | null
+  reviewer_name: string | null
+  review_comment: string | null
+  total_before: number | string
+  total_after: number | string
+  total_diff_amount: number | string
+  waiting_hours: number
+  items: OrderPriceAdjustmentItem[]
+  created_at: string
+  reviewed_at: string | null
+}
+
+/** 订单上挂载的待审批改价摘要 */
+export interface PendingPriceAdjustment {
+  id: number
+  reason: string | null
+  applicant_name: string | null
+  created_at: string
+  items_count: number
+  total_diff_amount: number | string
+}
+
+export interface OrderPriceAdjustmentPayload {
+  items: { order_item_id: number; new_unit_price: string }[]
+  reason?: string
+}
+
+export interface OrderPriceAdjustmentQuery {
+  status?: OrderPriceAdjustmentStatus | 'all'
+  page?: number
+  page_size?: number
+}
+
+export interface OrderPriceAdjustmentResult {
+  adjustment: OrderPriceAdjustment
+  order: OrderListItem
+}
+
+// ---------- 打印中心（orders.md §7） ----------
+export type SalesNoteDocType = 'delivery_note' | 'counter_sale'
+
+export interface SalesNoteItem {
+  spu_name: string
+  sku_spec: string
+  unit: string
+  quantity: string
+  unit_price: string
+  amount: string
+}
+
+export interface SalesNote {
+  order_id: number
+  order_no: string
+  doc_type: SalesNoteDocType
+  status: string
+  source: string
+  delivery_mode: string
+  created_at: string
+  customer_name: string | null
+  customer_phone: string | null
+  contact_name: string | null
+  sales_name: string | null
+  delivery_place: string | null
+  delivery_address: string | null
+  items: SalesNoteItem[]
+  total_amount: string
+  freight_mode: string
+  freight_cost: string | null
+  freight_deduction: string
+  coupon_name?: string | null
+  coupon_amount?: string
+  discount_amount: string
+  amount_due: string
+  paid_amount: string
+  payment_method: string | null
+  change_amount: string
+  remark: string | null
+  print_count: number
+  last_printed_at: string | null
+  is_reprint: boolean
+}
+
+export type PickingScopeType = 'trip' | 'shipment' | 'unassigned'
+
+export interface PickingSegment {
+  order_id: number
+  order_no: string
+  customer_name: string
+  quantity: string
+}
+
+export interface PickingItem {
+  sku_id: number
+  spu_id: number
+  spu_name: string
+  sku_spec: string
+  unit: string
+  base_unit: string
+  base_qty: string
+  segments: PickingSegment[]
+  order_count: number
+  total_quantity: string
+  total_base_qty: string
+}
+
+export interface PickingResult {
+  scope: { type: PickingScopeType; route_trip_id: number | null; freight_shipment_id: number | null; unassigned: boolean }
+  summary: { order_count: number; sku_count: number; spu_count: number }
+  items: PickingItem[]
+}
+
+export interface SystemSettingItem {
+  key: string
+  value: unknown
+  description: string | null
 }
 
 export interface OrderUpdatePayload {
@@ -481,25 +792,6 @@ export interface OrderUpdateResult {
 }
 
 // ---------- Finance ----------
-export interface Payment {
-  id: number
-  order_id: string
-  customer_id: number
-  customer_name: string
-  amount: number
-  method: PaymentMethod
-  status: 'pending' | 'success' | 'failed'
-  created_at: string
-  remark?: string
-}
-
-export interface CreditInfo {
-  customer_id: number
-  credit_limit: number
-  used_credit: number
-  available_credit: number
-}
-
 export interface StatementItem {
   order_id: string
   occurred_at: string
@@ -508,29 +800,234 @@ export interface StatementItem {
   remark?: string
 }
 
-export interface Statement {
+// ---------- 财务：销售提成（finance.md §9） ----------
+export type CommissionStatus = 'estimated' | 'pending' | 'settled'
+
+export interface CommissionRow {
+  order_id: number
+  order_no: string
+  sales_id: number | null
+  sales_name: string | null
   customer_id: number
   customer_name: string
-  period_start: string
-  period_end: string
-  opening_balance: number
-  closing_balance: number
-  items: StatementItem[]
+  order_date: string
+  delivered_date: string | null
+  base_amount: string
+  commission_rate: string | null
+  commission_amount: string
+  status: CommissionStatus
+  settlement_no: string | null
+  settled_at: string | null
+  /** 已结算时的实发金额快照；未结算为 null */
+  settled_amount: string | null
+  /** 已结算后又退货、尚未抵扣的提成 */
+  clawback_amount: string
+  /** 提成基数里已扣掉的退货金额 */
+  returned_amount: string
 }
 
-export interface Commission {
-  id: number
+export interface CommissionKpi {
+  total_amount: string
+  total_base: string
+  order_count: number
+  pending_amount: string
+  pending_count: number
+  settled_amount: string
+  settled_count: number
+  estimated_amount: string
+  estimated_count: number
+  /** 全店未抵扣完的退货冲销，跨月份累计 */
+  clawback_amount: string
+  clawback_count: number
+  /** 待结算扣除待抵扣后的应发现金 */
+  net_pending_amount: string
+}
+
+export interface CommissionSales {
   sales_id: number
   sales_name: string
-  order_id: string
-  customer_id: number
+  is_active: boolean
+  default_rate: string | null
+  has_rate: boolean
+  order_count: number
+  base_amount: string
+  commission_amount: string
+  pending_amount: string
+  settled_amount: string
+  clawback_amount: string
+  net_amount: string
+}
+
+export interface CommissionSummary {
+  month: string
+  kpi: CommissionKpi
+  sales: CommissionSales[]
+}
+
+export interface CommissionSettlementBrief {
+  settlement_no: string
+  sales_id: number
+  sales_name: string
+  gross_amount: string
+  deduct_amount: string
+  amount: string
+  item_count: number
+}
+
+export interface CommissionSettleResult {
+  settlements: CommissionSettlementBrief[]
+  total_gross_amount: string
+  total_deduct_amount: string
+  total_amount: string
+}
+
+export interface CommissionSettlement {
+  settlement_no: string
+  settle_date: string
+  sales_id: number
+  sales_name: string
+  item_count: number
+  gross_amount: string
+  deduct_amount: string
+  amount: string
+  remark: string | null
+  operator_name: string | null
+  status: 'active' | 'revoked'
+  revoked_at: string | null
+  cost_months: string[]
+}
+
+export interface CommissionSettlementItem {
+  order_id: number
+  order_no: string
   customer_name: string
-  order_amount: number
-  commission_rate: number
-  commission_amount: number
-  status: 'pending' | 'settled'
-  settled_at?: string
+  order_date: string
+  base_amount: string
+  commission_amount: string
+  /** commission 提成行 / deduction 退货冲销行（金额为负） */
+  kind: 'commission' | 'deduction'
+}
+
+export interface CommissionSettlementDetail extends CommissionSettlement {
+  items: CommissionSettlementItem[]
+}
+
+export interface CommissionRevokeResult {
+  settlement_no: string
+  status: string
+  amount: string
+  removed_expense_count: number
+}
+
+// ---------- 财务：提成设置（finance.md §9.2） ----------
+export interface CommissionSettingSales {
+  sales_id: number
+  sales_name: string
+  is_active: boolean
+  default_rate: string | null
+  own_count: number
+  sku_total: number
+}
+
+export interface CommissionSettingSku {
+  sku_id: number
+  sku_spec: string
+  sku_remark: string | null
+  unit: string
+  barcode: string | null
+  is_enabled: boolean
+  own_rate: string | null
+  effective_rate: string | null
+  is_own: boolean
+}
+
+export interface CommissionSettingSpu {
+  spu_id: number
+  spu_name: string
+  spu_code: string
+  category_id: number | null
+  category_name: string | null
+  is_enabled: boolean
+  skus: CommissionSettingSku[]
+}
+
+export interface CommissionSettingChangeItem {
+  sku_id: number
+  sku_name: string
+  sku_spec: string
+  old_rate: string | null
+  new_rate: string | null
+}
+
+export interface CommissionSettingChange {
+  batch_no: string
   created_at: string
+  operator_name: string
+  sales_id: number
+  sales_name: string
+  way: 'single' | 'batch' | 'clear'
+  changed_count: number
+  changes: CommissionSettingChangeItem[]
+}
+
+export interface CommissionSettingSaveResult {
+  sales_id: number
+  changed_count: number
+  cleared_count: number
+  batch_no: string | null
+}
+
+// ---------- 财务：经营成本与月度利润（finance.md §10） ----------
+export interface ExpenseCategory {
+  id: number
+  name: string
+  is_system: boolean
+}
+
+export interface OperatingExpense {
+  id: number
+  month: string
+  expense_date: string
+  category_id: number
+  category: string
+  amount: string
+  remark: string | null
+  operator_id: number | null
+  operator_name: string | null
+  source: 'manual' | 'commission'
+  settlement_no: string | null
+  created_at: string
+}
+
+export interface MonthlyProfitSummary {
+  month: string
+  sales_amount: string
+  goods_cost: string
+  freight_cost: string
+  rounding_amount: string
+  order_profit: string
+  operating_cost: string
+  profit: string
+  order_count: number
+}
+
+export interface MonthlyProfitPoint {
+  month: string
+  order_profit: string
+  operating_cost: string
+  profit: string
+}
+
+export interface ExpenseCategoryTotal {
+  category_id: number
+  category: string
+  amount: string
+}
+
+export interface MonthlyProfitReport extends MonthlyProfitSummary {
+  prev: MonthlyProfitSummary | null
+  trend: MonthlyProfitPoint[]
+  categories: ExpenseCategoryTotal[]
 }
 
 // ---------- Dashboard（接口见 docs/00-core/api/system.md） ----------
@@ -549,6 +1046,7 @@ export interface DashboardToday {
 
 export type DashboardTodoCode =
   | 'pool_orders'
+  | 'pending_orders'
   | 'pending_customers'
   | 'pending_returns'
   | 'credit_applications'
@@ -655,40 +1153,55 @@ export interface RegionNode {
   parent_id: number | null
   level: number
   sort_order: number
+  /** 送货地点在该区域的 active 客户数（接口返回时才有） */
+  customer_count?: number
+  is_active?: boolean
+  /** 省 / 市 / 县 / 乡镇 完整路径 */
+  full_name?: string | null
+  /** 是否存在下级节点 */
+  has_children?: boolean
   children?: RegionNode[]
 }
 
+export interface RegionSelection {
+  id: number
+  level: number
+  name: string
+  full_name: string
+  province: string
+  city: string
+  district: string
+  town: string
+}
+
 // ---------- Customer Level Config ----------
-export type CustomerLevelType = 'retail' | 'wholesale'
 export type PriceAdjustmentType = 'percent' | 'amount'
 
 export interface LevelConfig {
   id: number
   level_id: string
   nickname: string
-  type: CustomerLevelType
-  is_system: boolean
-  created_by?: number | null
+  applicable_tag_ids?: number[]
+  applicable_tags?: ApplicableTagItem[]
   description?: string
   is_active: boolean
   customer_count?: number
-  /** 该等级客户的默认授信额度（销售私有等级只能 1000 / 3000 / 5000） */
+  /** 该等级客户的默认授信额度 */
   default_credit_limit?: string
   created_at?: string
   updated_at?: string
 }
 
-/** GET /customer-levels/stats（Apifox CustomerLevelStatsResponse）：等级价格界面的等级行，附带创建人与客户数等聚合统计 */
+/** GET /customer-levels/stats（Apifox CustomerLevelStatsResponse）：等级价格界面的等级行，附带客户数等聚合统计 */
 export interface LevelStats {
   id: number
   level_id: string
   nickname: string
-  type: CustomerLevelType
+  applicable_tag_ids?: number[]
+  applicable_tags?: ApplicableTagItem[]
   description?: string | null
+  default_credit_limit?: string
   is_active?: boolean
-  is_system?: boolean
-  created_by?: number | null
-  created_by_name?: string | null
   customer_count: number
   monthly_sales?: string | null
   monthly_orders: number
@@ -699,7 +1212,7 @@ export interface LevelStats {
 export interface LevelCreatePayload {
   level_id: string
   nickname: string
-  type: CustomerLevelType
+  applicable_tag_ids?: number[]
   description?: string | null
   default_credit_limit?: number | string
   is_active?: boolean
@@ -708,7 +1221,7 @@ export interface LevelCreatePayload {
 export interface LevelUpdatePayload {
   level_id?: string
   nickname?: string
-  type?: CustomerLevelType
+  applicable_tag_ids?: number[]
   description?: string | null
   default_credit_limit?: number | string
   is_active?: boolean
@@ -777,6 +1290,8 @@ export interface ProductSPU {
   sku_attributes?: SkuAttribute[]
   /** 1=启用, 0=停用 */
   status: number
+  /** 默认货源: self=店家自己, temp_pick=临时拿货 */
+  supply_mode?: 'self' | 'temp_pick'
   supplier_id?: number
   is_miniprogram?: boolean
   /** 基础计量单位，库存按它计数 */
@@ -878,9 +1393,23 @@ export interface Vendor {
   updated_at: string | null
 }
 
+export interface PurchaseReceiptItem {
+  id: number
+  order_item_id: number | null
+  spu_id: number
+  spu_name: string
+  base_unit: string
+  sku_id: number | null
+  sku_name: string | null
+  quantity: string
+  unit_cost: string
+  amount: string
+  update_cost: boolean
+}
+
 export interface PurchaseReceipt {
   id: number
-  source_type: 'order' | 'stock'
+  source_type: 'order' | 'stock' | 'return'
   vendor_id: number
   vendor_name: string
   order_id: number | null
@@ -888,13 +1417,14 @@ export interface PurchaseReceipt {
   status: 'draft' | 'confirmed' | 'cancelled'
   purchased_at: string | null
   confirmed_at: string | null
+  photos?: string[] | null
   total_amount: string
   paid_amount: string
   version: number
   created_at: string
   remark: string | null
   corrections: { before: Record<string, unknown> | null; after: Record<string, unknown> | null; reason: string | null; operator_name: string; created_at: string }[]
-  items: { id: number; order_item_id: number | null; sku_id: number; sku_name: string; quantity: string; unit_cost: string; amount: string; update_cost: boolean }[]
+  items: PurchaseReceiptItem[]
 }
 
 export interface PurchaseResult {
@@ -911,16 +1441,64 @@ export interface VendorAccount {
   payable_balance: string
   total_purchases: string
   total_payments: string
+  linked_customer_id?: number | null
+  linked_customer_name?: string | null
+  customer_ar_balance?: string | null
 }
 
 export interface VendorLedgerEntry {
   id: number
-  type: 'purchase' | 'payment' | 'correction_reversal' | 'correction_new'
+  type: 'purchase' | 'payment' | 'purchase_return' | 'offset' | 'correction_reversal' | 'correction_new'
   amount: string
   balance_after: string
   purchase_receipt_id: number | null
   order_id: number | null
+  offset_id?: number | null
   occurred_at: string
+  operator_name: string | null
+  remark: string | null
+}
+
+export interface LedgerOffset {
+  id: number
+  customer_id: number
+  customer_name?: string | null
+  vendor_id: number
+  vendor_name?: string | null
+  amount: string
+  reversed_offset_id?: number | null
+  is_reversed: boolean
+  remark?: string | null
+  operator_name?: string | null
+  occurred_at: string
+}
+
+export interface StockRow {
+  spu_id: number
+  spu_name: string
+  spu_code: string
+  supply_mode: 'self' | 'temp_pick'
+  base_unit: string
+  on_hand: string
+  pending_quantity: string
+  available_quantity: string
+  is_negative: boolean
+  sku_count: number
+  updated_at?: string | null
+}
+
+export interface StockMovementRow {
+  id: number
+  occurred_at: string
+  spu_id: number
+  spu_name: string
+  base_unit: string
+  sku_id: number | null
+  sku_name: string | null
+  type: string
+  change: string
+  ref_type: string | null
+  ref_id: number | null
   operator_name: string | null
   remark: string | null
 }
@@ -932,7 +1510,7 @@ export interface UploadImageResponse {
   url: string
 }
 
-// ---------- Price Center (level-prices / customer-sku-prices / price-books) ----------
+// ---------- Price Center (level-prices / customer-sku-prices / 价格查询) ----------
 export interface LevelPrice {
   id: number
   level_id: number
@@ -1003,46 +1581,32 @@ export interface CustomerSkuPricePreview {
   customer_sku_price_id: number | null
 }
 
-export type PriceChannelType = 'county_wholesale' | 'street_vendor'
-
-export interface PriceBook {
-  id: number
-  name: string
-  channel_type: PriceChannelType
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export interface PriceBookCreatePayload {
-  name: string
-  channel_type: PriceChannelType
-}
-
-export interface PriceBookUpdatePayload {
-  name?: string | null
-  channel_type?: PriceChannelType | null
-}
-
-export interface PriceBookItem {
-  id: number
-  book_id: number
+/** GET /prices/customer-prices：某客户某 SKU 的成交价、来源与来源设定时间（价格查询页，pricing.md §7） */
+export interface CustomerPriceRow {
+  sku_id: number
   spu_id: number
-  price: string
-  effective_date: string
-  created_at?: string | null
-  updated_at?: string | null
-}
-
-export interface PriceBookItemCreatePayload {
-  book_id: number
-  spu_id: number
-  price: number | string
-  effective_date: string
-}
-
-export interface PriceBookItemUpdatePayload {
-  price?: number | string | null
-  effective_date?: string | null
+  spu_name: string
+  spu_code: string
+  /** 规格属性值拼接，如"斤 本地"；接口返回，前端不再拼接 */
+  sku_spec: string
+  /** specs 里的"规格"值，没有时为空串 */
+  unit: string
+  base_qty: string | number
+  /** SPU 的基础单位，如斤 */
+  base_unit?: string | null
+  allow_decimal: boolean
+  is_enabled: boolean
+  unit_price: string
+  /** 内部细分四值：客户专属价 / 等级 SKU 规则 / 等级默认规则 / 建议零售价 */
+  price_source: PriceSource
+  /** 命中的那条规则的最后设定时间；无规则时为 SKU 记录的更新时间 */
+  price_source_set_at?: string | null
+  suggested_price: string
+  level_price: string
+  min_price: string
+  /** 仅管理员返回 */
+  cost_price?: string | null
+  below_min: boolean
 }
 
 // ---------- Audit Log ----------
@@ -1059,6 +1623,7 @@ export interface AuditLog {
   after_value?: string
   ip_address?: string
   remark?: string
+  request_id?: string | null
   created_at: string
 }
 
@@ -1159,7 +1724,10 @@ export interface RecordTripOption {
   trip_id: number
   trip_date: string
   name: string | null
+  owner_name?: string | null
+  days_from_today?: number
   within_pool_days: boolean
+  has_customer_order?: boolean
   is_default: boolean
 }
 
@@ -1175,17 +1743,77 @@ export interface RecordExistingOrder {
 }
 
 export interface RecordUpcomingTrips {
+  delivery_region_id?: number | null
+  delivery_region_name?: string | null
   pool_max_days: number
   trips: RecordTripOption[]
   existing_orders: RecordExistingOrder[]
-  freight: { line_id: number; line_name: string; ship_date: string; cutoff_passed: boolean; default_freight_mode: 'deduct' | 'store_paid' | 'customer_paid' } | null
+  freight: (FreightLineOption & { default_freight_mode: 'deduct' | 'store_paid' | 'customer_paid' }) | null
+  freight_lines: FreightLineOption[]
   suggestion: string
 }
 
-export interface RecordFreightLine {
+export interface FreightLineSchedule {
+  depart_time: string
+  label?: string | null
+}
+
+export interface FreightLineOption {
+  line_id: number
+  line_name: string
+  depart_time: string
+  schedule_label?: string | null
+  schedules?: FreightLineSchedule[]
+  ship_date: string
+  cutoff_passed: boolean
+  is_default: boolean
+}
+
+export interface FreightLineStop {
+  id: number
+  town_region_id: number
+  town_name: string
+  level: number
+  seq: number
+  customer_count: number
+}
+
+export interface FreightLine {
   id: number
   name: string
-  stops: { id: number; town_name: string; drop_point: string }[]
+  plate_no: string | null
+  driver_name: string | null
+  driver_phone: string | null
+  receive_address: string | null
+  schedules: FreightLineSchedule[]
+  cutoff_minutes: number
+  is_active: boolean
+  stops: FreightLineStop[]
+  customer_count: number
+}
+
+/** 录单 / 客户编辑选线路用的最小结构 */
+export type RecordFreightLine = FreightLine
+
+export interface FreightLineStopInput {
+  town_region_id: number
+}
+
+export interface FreightLinePayload {
+  name: string
+  plate_no?: string | null
+  driver_name?: string | null
+  driver_phone?: string | null
+  receive_address?: string | null
+  schedules: FreightLineSchedule[]
+  cutoff_minutes?: number | null
+  is_active?: boolean
+  stops: FreightLineStopInput[]
+}
+
+export interface FreightLineResult {
+  line: FreightLine
+  warnings: ApiWarning[]
 }
 
 export interface FrequentSku {
@@ -1206,11 +1834,290 @@ export interface RecordOrderPayload {
   route_trip_id?: number | null
   merge_into_order_id?: number | null
   freight_line_id?: number | null
-  freight_stop_id?: number | null
   ship_date?: string | null
   freight_mode?: 'deduct' | 'store_paid' | 'customer_paid'
   freight_cost?: string
   remark?: string
+  customer_coupon_id?: number | null
+  mark_delivered?: boolean
+  delivered_at?: string
+  payment?: { method: 'wechat' | 'alipay' | 'cash' | 'other'; amount: string; rounding_amount?: string }
+}
+
+// ---------- 线路配送：出车（delivery.md §5） ----------
+export type RouteTripStatus = 'planned' | 'delivering' | 'finished' | 'cancelled'
+export type RouteStopOrigin = 'county' | 'corridor' | 'manual'
+
+export interface RouteTripStop {
+  region_id: number
+  region_name: string
+  parent_region_name: string | null
+  seq: number
+  origin: RouteStopOrigin
+  customer_count: number
+}
+
+export interface RouteTripStopInput {
+  region_id: number
+  origin?: RouteStopOrigin
+}
+
+export interface RouteTrip {
+  id: number
+  trip_date: string
+  name: string | null
+  owner_id: number
+  owner_name: string
+  template_id: number | null
+  auto_generated: boolean
+  status: RouteTripStatus
+  departed_at: string | null
+  finished_at: string | null
+  stops: RouteTripStop[]
+  stops_text: string
+  customer_count: number
+  called_count: number
+  order_count: number
+  order_amount: string
+  created_at: string
+}
+
+export interface RouteTripOrder {
+  order_id: number
+  order_no: string
+  customer_id: number
+  customer_name: string
+  customer_phone: string | null
+  region_id: number
+  region_name: string
+  stop_seq: number
+  sort_no: number
+  total_amount: string
+  delivered_amount: string | null
+  status: 'pending' | 'delivering' | 'delivered' | 'cancelled'
+  auto_joined: boolean
+  auto_moved: boolean
+  dispatch_note: string | null
+  sales_id: number | null
+  sales_name: string | null
+  pending_price_adjustment?: PendingPriceAdjustment | null
+}
+
+export interface RouteTemplateStop {
+  region_id: number
+  region_name: string
+  parent_region_name: string | null
+  seq: number
+  origin: RouteStopOrigin
+}
+
+export type RouteScheduleType = 'none' | 'weekly' | 'monthly'
+
+export interface RouteTemplate {
+  id: number
+  name: string
+  remark: string | null
+  is_active: boolean
+  stops: RouteTemplateStop[]
+  stops_text: string
+  schedule_type: RouteScheduleType
+  schedule_weekdays: number[]
+  schedule_month_days: number[]
+  default_owner_id: number | null
+  default_owner_name: string | null
+  next_trip_date: string | null
+}
+
+export interface RouteTemplateSavePayload {
+  name: string
+  remark: string | null
+  is_active: boolean
+  stops: { region_id: number; origin: RouteStopOrigin }[]
+  schedule_type: RouteScheduleType
+  schedule_weekdays: number[]
+  schedule_month_days: number[]
+  default_owner_id: number | null
+}
+
+export interface CountyCorridorSavePayload {
+  town_region_ids: number[]
+}
+
+export interface CountyCorridorTown {
+  region_id: number
+  region_name: string
+  parent_region_name: string | null
+  seq: number
+  customer_count: number
+}
+
+export interface CountyCorridor {
+  county_region_id: number
+  county_name: string
+  customer_count: number
+  towns: CountyCorridorTown[]
+}
+
+export interface CountyCorridorSummary {
+  county_region_id: number
+  county_name: string
+  town_count: number
+  customer_count: number
+}
+
+export interface RouteTripDraftOrder {
+  order_id: number
+  order_no: string
+  customer_id: number
+  customer_name: string
+  region_name: string
+  total_amount: string
+  pool_deadline: string
+  excluded?: boolean
+}
+
+export interface RouteTripMoveOrder {
+  order_id: number
+  order_no: string
+  customer_id: number
+  customer_name: string
+  from_trip_id: number
+  from_trip_date: string
+  to_trip_id: number
+  to_trip_date: string
+  total_amount: string
+}
+
+export interface RouteTripDraftRequest {
+  trip_date: string
+  county_region_ids?: number[]
+  template_id?: number
+  stops?: RouteTripStopInput[]
+  trip_id?: number
+  exclude_order_ids?: number[]
+}
+
+export interface RouteTripDraft {
+  stops: RouteTripStop[]
+  customer_count: number
+  join_orders: RouteTripDraftOrder[]
+  join_order_count: number
+  move_orders: RouteTripMoveOrder[]
+  move_order_count: number
+  return_orders: RouteTripDraftOrder[]
+  warnings: ApiWarning[]
+}
+
+export interface RouteTripSavePayload {
+  trip_date: string
+  name?: string | null
+  owner_id: number
+  template_id?: number | null
+  stops: RouteTripStopInput[]
+  exclude_order_ids?: number[]
+}
+
+export interface RouteTripSaveResult {
+  route_trip: RouteTrip
+  joined_orders?: RouteTripOrder[]
+  returned_orders?: RouteTripOrder[]
+  moved_orders?: RouteTripOrder[]
+  warnings: ApiWarning[]
+}
+
+export interface RouteTripCancelResult {
+  route_trip: RouteTrip
+  returned_orders: RouteTripOrder[]
+  warnings: ApiWarning[]
+}
+
+export type CallResult = 'none' | 'ordered' | 'declined' | 'unreachable'
+
+export interface OtherTripOrder {
+  order_id: number
+  trip_id: number
+  trip_date: string
+}
+
+export interface CallListCustomer {
+  customer_id: number
+  customer_name: string
+  customer_phone: string | null
+  region_id: number
+  region_name: string
+  stop_seq: number
+  sales_id: number | null
+  sales_name: string | null
+  last_order_date: string | null
+  ar_balance: string
+  call_result: CallResult
+  trip_order_ids: number[]
+  other_trip_order: OtherTripOrder | null
+}
+
+export interface RouteTripActionResult {
+  route_trip: RouteTrip
+  warnings: ApiWarning[]
+}
+
+// ---------- 线路配送：物流批次与交车（delivery.md §9） ----------
+export type FreightShipmentStatus = 'open' | 'handed_over'
+
+export interface FreightShipment {
+  id: number
+  line_id: number
+  line_name: string
+  plate_no: string | null
+  driver_name: string | null
+  driver_phone: string | null
+  ship_date: string
+  depart_time: string
+  schedule_label?: string | null
+  cutoff_at: string
+  status: FreightShipmentStatus
+  customer_count: number
+  order_count: number
+  order_amount: string
+  handed_over_count: number
+  freight_fee: string
+  handed_over_at: string | null
+}
+
+export interface FreightShipmentOrder {
+  order_id: number
+  order_no: string
+  customer_id: number
+  customer_name: string
+  customer_phone: string | null
+  town_region_id: number
+  town_name: string
+  stop_seq: number | null
+  stop_removed: boolean
+  customer_address: string | null
+  total_amount: string
+  freight_mode: 'deduct' | 'store_paid' | 'customer_paid'
+  freight_cost: string | null
+  status: 'pending' | 'delivered' | 'cancelled'
+  handed_over_at: string | null
+  handed_over_by: number | null
+  handed_over_by_name: string | null
+  sales_id: number | null
+  sales_name: string | null
+}
+
+export interface FreightShipmentDetail extends FreightShipment {
+  orders: FreightShipmentOrder[]
+}
+
+export interface FreightHandoverPayload {
+  orders?: { order_id: number; freight_cost?: string | null }[]
+  total_freight?: string
+}
+
+export interface FreightHandoverResult {
+  orders: FreightShipmentOrder[]
+  shipment: FreightShipment
+  warnings: ApiWarning[]
 }
 
 export interface PriceQuoteResponse {
@@ -1327,6 +2234,55 @@ export interface CounterOrderResult {
   warnings: ApiWarning[]
 }
 
+export interface OrderResult {
+  order: OrderListItem
+  warnings: ApiWarning[]
+}
+
+export interface OrderApprovalRecord {
+  id: number
+  order_id: number
+  stage: string
+  action: string
+  operator_id: number | null
+  operator_name: string | null
+  order_amount: string
+  occupied_credit: string | null
+  effective_credit: string | null
+  comment: string | null
+  created_at: string
+}
+
+export interface OrderApprovalPreviousStep {
+  operator_name: string | null
+  created_at: string
+  comment: string | null
+}
+
+export interface OrderApprovalItem {
+  order: OrderListItem
+  stage: string
+  amount_before: string | null
+  ar_balance: string
+  effective_credit: string | null
+  occupied_credit: string | null
+  overdue_amount: string
+  submitted_at: string
+  waiting_hours: number
+  previous_step: OrderApprovalPreviousStep | null
+}
+
+export interface OrderApprovalQuery {
+  stage?: 'sales' | 'admin'
+  customer_id?: number
+  sales_id?: number
+  date_from?: string
+  date_to?: string
+  order_by?: 'submitted_at' | 'total_amount'
+  page?: number
+  page_size?: number
+}
+
 export interface PrintRecordResult {
   order_id: number
   print_count: number
@@ -1416,4 +2372,271 @@ export interface ReturnOrder extends ReturnTerms, ReturnAmounts {
 export interface ReturnResult {
   return_order: ReturnOrder
   warnings: ApiWarning[]
+}
+
+// ---------- 客户账期（finance.md §3） ----------
+export interface AccountRow {
+  customer_id: number
+  name: string
+  sales_id: number | null
+  sales_name: string | null
+  term_type: 'days' | 'monthly'
+  /** 后端算好的账期标签，前端直接用，不要自己拼 */
+  term_label: string
+  balance: string
+  overdue_amount: string
+  max_overdue_days: number
+  pending_amount: string
+  return_credit_amount: string
+  effective_credit: string
+  credit_source: 'level' | 'custom'
+  last_payment_at: string | null
+}
+
+export interface AgingBuckets {
+  fresh: string
+  o1: string
+  o2: string
+  o3: string
+}
+
+export interface AccountSummary {
+  ar_total: string
+  overdue_total: string
+  overdue_customer_count: number
+  month_received: string
+  month_payment_count: number
+  return_credit_total: string
+  customer_count: number
+  buckets: AgingBuckets
+}
+
+export interface Bill {
+  order_id: number
+  order_no: string
+  delivered_at: string | null
+  due_date: string | null
+  delivered_amount: string
+  paid_amount: string
+  discount_amount: string
+  return_settled_amount: string
+  pending_amount: string
+  overdue_days: number
+}
+
+export interface BillSummary extends AccountRow {
+  last_payment_method: string | null
+}
+
+export interface BillsResponse {
+  summary: BillSummary
+  bills: Bill[]
+  settle_min_ratio?: string
+}
+
+export interface LedgerEntry {
+  id: number
+  type: 'delivery' | 'freight_offset' | 'payment' | 'return' | 'discount' | 'offset'
+  amount: string
+  balance_after: string
+  ref_type: string | null
+  ref_id: number | null
+  order_id: number | null
+  occurred_at: string
+  operator_name: string | null
+  remark: string | null
+}
+
+export interface PaymentAllocationInput {
+  order_id: number
+  amount: string
+}
+
+export interface PaymentPayload {
+  customer_id: number
+  amount: string
+  rounding_amount?: string
+  method: 'wechat' | 'alipay' | 'cash' | 'other'
+  paid_at?: string
+  /** 传了 = 按单平；不传 = 从最早未结清订单往后自动平 */
+  allocations?: PaymentAllocationInput[]
+  remark?: string
+}
+
+export interface PaymentAllocationResult {
+  order_id: number
+  order_no: string
+  amount: string
+  closed: boolean
+}
+
+export interface PaymentResult {
+  payment_id: number
+  amount: string
+  rounding_amount: string
+  allocated_total: string
+  balance_before: string
+  balance_after: string
+  allocations: PaymentAllocationResult[]
+  warnings: ApiWarning[]
+}
+
+
+// ---------- 优惠券（coupons.md） ----------
+export type CouponType = 'festival' | 'freight_subsidy' | 'diff_subsidy' | 'referral_reward'
+export type CouponValidityType = 'fixed_days' | 'fixed_range'
+export type CouponTemplateStatus = 'active' | 'disabled'
+export type CustomerCouponStatus = 'unused' | 'used' | 'expired' | 'voided'
+
+export interface CouponTemplate {
+  id: number
+  name: string
+  coupon_type: CouponType
+  amount: string
+  min_order_amount: string
+  validity_type: CouponValidityType
+  valid_days?: number | null
+  valid_from?: string | null
+  valid_to?: string | null
+  status: CouponTemplateStatus
+  remark?: string | null
+  issued_count: number
+  used_count: number
+  created_by_name?: string | null
+  created_at: string
+}
+
+export interface CouponTemplatePayload {
+  name: string
+  coupon_type: CouponType
+  amount: string
+  min_order_amount: string
+  validity_type: CouponValidityType
+  valid_days?: number | null
+  valid_from?: string | null
+  valid_to?: string | null
+  remark?: string | null
+}
+
+export interface CouponIssuePayload {
+  template_id?: number | null
+  name?: string | null
+  coupon_type?: CouponType | null
+  amount?: string | null
+  min_order_amount?: string
+  validity_type?: CouponValidityType | null
+  valid_days?: number | null
+  valid_from?: string | null
+  valid_to?: string | null
+  target_type: 'customers' | 'tags' | 'levels'
+  customer_ids?: number[]
+  tag_ids?: number[]
+  level_ids?: number[]
+  quantity_per_customer?: number
+  issue_remark?: string | null
+}
+
+export interface CustomerCouponRecord {
+  id: number
+  coupon_code: string
+  template_id?: number | null
+  customer_id: number
+  customer_name?: string | null
+  customer_phone?: string | null
+  name: string
+  coupon_type: CouponType
+  amount: string
+  min_order_amount: string
+  valid_from: string
+  valid_to: string
+  status: CustomerCouponStatus
+  order_id?: number | null
+  order_no?: string | null
+  used_at?: string | null
+  discount_applied?: string | null
+  issued_by_name?: string | null
+  issued_at: string
+  issue_remark?: string | null
+  void_reason?: string | null
+}
+
+export interface CustomerCouponRecordListResult {
+  items: CustomerCouponRecord[]
+  total: number
+  page: number
+  page_size: number
+  summary: {
+    total_issued: number
+    total_used: number
+    total_unused: number
+    total_discount_applied: string
+  }
+}
+
+export interface AvailableCoupon {
+  id: number
+  coupon_code: string
+  name: string
+  coupon_type: CouponType
+  amount: string
+  min_order_amount: string
+  valid_from: string
+  valid_to: string
+  usable: boolean
+  unusable_reason?: string | null
+  deduct_amount: string
+}
+
+export interface AvailableCouponListResult {
+  items: AvailableCoupon[]
+  recommended_coupon_id: number | null
+}
+
+export interface ReferralConfig {
+  enabled: boolean
+  reward_amount: string
+  coupon_min_amount: string
+  coupon_valid_days: number
+  min_order_amount: string
+}
+
+export interface ReferralConfigUpdatePayload {
+  enabled?: boolean
+  reward_amount?: number
+  coupon_min_amount?: number
+  coupon_valid_days?: number
+  min_order_amount?: number
+}
+
+export interface ReferralRewardRecord {
+  id: number
+  referrer_customer_id: number
+  referrer_customer_name?: string | null
+  referrer_customer_phone?: string | null
+  invitee_customer_id: number
+  invitee_customer_name?: string | null
+  invitee_customer_phone?: string | null
+  order_id?: number | null
+  order_no?: string | null
+  customer_coupon_id?: number | null
+  coupon_code?: string | null
+  coupon_status?: string | null
+  reward_amount: string
+  status: 'issued' | 'skipped'
+  skip_reason?: string | null
+  triggered_at: string
+  created_at: string
+}
+
+export interface ReferralRewardListResult {
+  items: ReferralRewardRecord[]
+  total: number
+  page: number
+  page_size: number
+  summary: {
+    total: number
+    issued_count: number
+    skipped_count: number
+    issued_amount: string
+  }
 }

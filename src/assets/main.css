@@ -93,6 +93,36 @@ a { text-decoration: none; color: inherit; }
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   margin-bottom: 16px;
 }
+/* 列表页：筛选卡与列表卡分开，翻页固定在页面最下方 */
+.list-page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 76px;
+}
+.list-page .filter-bar { margin-bottom: 0; }
+.list-page .card-section { min-width: 0; }
+.list-page .pagination-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: var(--wdm-sider-width, 220px);
+  z-index: 20;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  min-height: 56px;
+  margin: 0;
+  padding: 10px 16px;
+  color: var(--text-3);
+  font-size: 12px;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.08);
+}
+.list-page .pagination-bar > span:first-child { margin-right: auto; }
 .pagination-bar { display: flex; justify-content: flex-end; margin-top: 16px; }
 
 /* 非 card-section 页面也使用与门店零售相同的内容承载面。 */

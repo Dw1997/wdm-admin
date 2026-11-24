@@ -98,9 +98,10 @@
 
 <script setup lang="ts">
 import { h, ref, reactive, onMounted, computed } from 'vue'
-import { NButton, NTag, NSpace, NPopconfirm, useMessage, type DataTableColumns } from 'naive-ui'
+import { NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { roleApi, featureApi } from '@/api'
 import type { RoleConfig, FeatureNode } from '@/types'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
 const message = useMessage()
 const roles = ref<RoleConfig[]>([])
@@ -128,13 +129,10 @@ const roleColumns = computed<DataTableColumns<RoleConfig>>(() => [
   { title: '描述', key: 'description', ellipsis: { tooltip: true } },
   { title: '权限点', key: 'feature_ids', width: 80, render: (r) => `${r.feature_ids.length}` },
   { title: '状态', key: 'is_active', width: 70, render: (r) => h(NTag, { size: 'small', type: r.is_active ? 'success' : 'error' }, { default: () => r.is_active ? '启用' : '禁用' }) },
-  { title: '操作', key: 'actions', width: 210, render: (r) => h('div', [
-    h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openRoleEdit(r) }, { default: () => '编辑' }),
-    h(NButton, { size: 'small', text: true, type: 'primary', style: 'margin-left:8px', onClick: () => openAssign(r) }, { default: () => '权限配置' }),
-    r.is_system ? null : h(NPopconfirm, { onPositiveClick: () => onRoleDelete(r) }, {
-      default: () => '确认删除?',
-      trigger: () => h(NButton, { size: 'small', text: true, type: 'error', style: 'margin-left:8px' }, { default: () => '删除' }),
-    }),
+  { title: '操作', key: 'actions', width: 115, render: (r) => actionBar([
+    actionIcon({ icon: 'edit', label: '编辑', onClick: () => openRoleEdit(r) }),
+    actionIcon({ icon: 'permission', label: '权限配置', onClick: () => openAssign(r) }),
+    !r.is_system && actionIcon({ icon: 'delete', label: '删除', confirm: '确认删除?', onClick: () => onRoleDelete(r) }),
   ]) },
 ])
 
@@ -249,14 +247,11 @@ function renderPermissionLabel({ option }: { option: any }) {
       h(NTag, { size: 'tiny', type: option.type === 'module' ? 'primary' : option.type === 'function' ? 'warning' : 'default', style: 'margin-left:4px' }, { default: () => typeLabel(option.type) }),
       !option.is_active ? h(NTag, { size: 'tiny', type: 'error', style: 'margin-left:4px' }, { default: () => '禁用' }) : null,
     ]),
-    h(NSpace, { size: 'small' }, { default: () => [
-      h(NButton, { size: 'tiny', text: true, type: 'primary', onClick: (e: Event) => { e.stopPropagation(); openPermissionCreate(option) } }, { default: () => '添加子节点' }),
-      h(NButton, { size: 'tiny', text: true, type: 'primary', onClick: (e: Event) => { e.stopPropagation(); openPermissionEdit(option) } }, { default: () => '编辑' }),
-      h(NPopconfirm, { onPositiveClick: () => onPermissionDelete(option) }, {
-        default: () => '确认删除?',
-        trigger: () => h(NButton, { size: 'tiny', text: true, type: 'error', onClick: (e: Event) => e.stopPropagation() }, { default: () => '删除' }),
-      }),
-    ] }),
+    actionBar([
+      actionIcon({ icon: 'add', label: '添加子节点', size: 16, stopPropagation: true, onClick: () => openPermissionCreate(option) }),
+      actionIcon({ icon: 'edit', label: '编辑', size: 16, stopPropagation: true, onClick: () => openPermissionEdit(option) }),
+      actionIcon({ icon: 'delete', label: '删除', size: 16, stopPropagation: true, confirm: '确认删除?', onClick: () => onPermissionDelete(option) }),
+    ], { stopPropagation: true, gap: 8 }),
   ])
 }
 

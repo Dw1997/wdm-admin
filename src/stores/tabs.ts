@@ -36,14 +36,16 @@ export const useTabsStore = defineStore('tabs', () => {
       activeKey.value = key
       return
     }
-    const existing = tabs.value.find((t) => t.path === path && t.closable)
+    // 同一路由的查询参数变化（筛选、保存提示等）复用原标签，不新开一个。
+    const existing = tabs.value.find((t) => t.closable && t.path.split('?')[0] === basePath)
     if (existing) {
       existing.label = label
+      existing.path = path
       activeKey.value = existing.key
       return
     }
-    tabs.value.push({ key: path, label, path, closable: true })
-    activeKey.value = path
+    tabs.value.push({ key: basePath, label, path, closable: true })
+    activeKey.value = basePath
   }
 
   function close(key: string) {

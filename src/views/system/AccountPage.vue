@@ -40,16 +40,25 @@
         <n-button type="primary" :loading="passwordSaving" @click="onPasswordSave">确认重置</n-button>
       </template>
     </n-modal>
+
+    <PromoQrcodeModal
+      v-model:show="qrVisible"
+      :account-id="qrAccount?.id"
+      :account-name="qrAccount ? (qrAccount.real_name || qrAccount.username) : ''"
+      @loaded="onQrLoaded"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { h, ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NTag, NPopconfirm, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
+import { NButton, NTag, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
 import { accountApi, roleApi } from '@/api'
+import PromoQrcodeModal from '@/components/PromoQrcodeModal.vue'
+import { actionBar, actionIcon } from '@/components/tableActions'
 import { formatDate } from '@/utils/format'
-import type { SystemAccount, RoleConfig } from '@/types'
+import type { SystemAccount, RoleConfig, PromotionQrcode } from '@/types'
 
 const message = useMessage()
 const router = useRouter()
@@ -66,6 +75,20 @@ const passwordSaving = ref(false)
 const passwordAccount = ref<SystemAccount | null>(null)
 const newPassword = ref('')
 const confirmPassword = ref('')
+const qrVisible = ref(false)
+const qrAccount = ref<SystemAccount | null>(null)
+const phonePattern = /^1[3-9]\d{9}$/
+
+function openQrcode(r: SystemAccount) {
+  qrAccount.value = r
+  qrVisible.value = true
+}
+
+function onQrLoaded(res: PromotionQrcode) {
+  if (qrAccount.value && res.invite_code && !qrAccount.value.invite_code) {
+    qrAccount.value.invite_code = res.invite_code
+  }
+}
 
 const roleOptions = computed<SelectOption[]>(() => roles.value.filter((r) => r.code !== 'sales').map((r) => ({ label: `${r.name} (${r.code})`, value: r.id, disabled: !r.is_active })))
 
@@ -77,17 +100,19 @@ const columns = computed<DataTableColumns<SystemAccount>>(() => [
   { title: '角色', key: 'role_name', width: 140, render: (r) => h('div', [r.role_name, h('div', { style: 'font-size:12px;color:var(--text-3)' }, r.role_code)]) },
   { title: '平台', key: 'platform', width: 110, render: (r) => h(NTag, { size: 'small', type: r.platform === 'web' ? 'primary' : 'warning' }, { default: () => r.platform === 'web' ? 'Web 管理端' : '销售端' }) },
   { title: '状态', key: 'is_active', width: 70, render: (r) => h(NTag, { size: 'small', type: r.is_active ? 'success' : 'error' }, { default: () => r.is_active ? '启用' : '禁用' }) },
+  { title: '推广码', key: 'invite_code', width: 90, render: (r) => r.is_active ? (r.invite_code || '—') : '已失效' },
   { title: '最后登录', key: 'last_login_at', width: 150, render: (r) => r.last_login_at ? formatDate(r.last_login_at) : '—' },
-  { title: '操作', key: 'actions', width: 190, render: (r) => r.role_code === 'sales'
-    ? h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => router.push('/sales/list') }, { default: () => '销售管理' })
-    : h('div', [
-    h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
-    h(NButton, { size: 'small', text: true, type: 'primary', style: 'margin-left:8px', onClick: () => openPassword(r) }, { default: () => '重置密码' }),
-    h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, {
-      default: () => '确认删除该账户?',
-      trigger: () => h(NButton, { size: 'small', text: true, type: 'error', style: 'margin-left:8px' }, { default: () => '删除' }),
-    }),
-  ]) },
+  { title: '操作', key: 'actions', width: 150, render: (r) => r.role_code === 'sales'
+    ? actionBar([
+        r.is_active && actionIcon({ icon: 'qrcode', label: '推广码', onClick: () => openQrcode(r) }),
+        h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => router.push('/sales/list') }, { default: () => '销售管理' }),
+      ])
+    : actionBar([
+        r.is_active && actionIcon({ icon: 'qrcode', label: '推广码', onClick: () => openQrcode(r) }),
+        actionIcon({ icon: 'edit', label: '编辑', onClick: () => openEdit(r) }),
+        actionIcon({ icon: 'key', label: '重置密码', onClick: () => openPassword(r) }),
+        actionIcon({ icon: 'delete', label: '删除', confirm: '确认删除该账户?', onClick: () => onDelete(r) }),
+      ]) },
 ])
 
 async function reload() {
@@ -110,21 +135,40 @@ function openEdit(r: SystemAccount) {
 }
 
 async function onSave() {
-  if (!form.username || !form.role_id) {
-    message.warning('请填写用户名并选择角色')
+  const username = (form.username || '').trim()
+  const realName = (form.real_name || '').trim()
+  const phone = (form.phone || '').trim()
+  if (!username) {
+    message.warning('请填写用户名')
     return
   }
-  if (!form.id && (!form.password || form.password.length < 6)) {
-    message.warning('初始密码至少 6 位')
+  if (!form.id && (username.length < 3 || username.length > 64)) {
+    message.warning('用户名长度须为 3–64 位')
+    return
+  }
+  if (!form.id && (!form.password || form.password.length < 6 || form.password.length > 128)) {
+    message.warning('初始密码长度须为 6–128 位')
+    return
+  }
+  if (realName.length > 50) {
+    message.warning('姓名最多 50 个字符')
+    return
+  }
+  if (phone && !phonePattern.test(phone)) {
+    message.warning('请填写正确的 11 位手机号')
+    return
+  }
+  if (!form.role_id) {
+    message.warning('请选择角色')
     return
   }
   saving.value = true
   try {
     if (form.id) {
-      await accountApi.update(form.id, { real_name: form.real_name || null, phone: form.phone || null, role_id: form.role_id, is_active: form.is_active })
+      await accountApi.update(form.id, { real_name: realName || null, phone: phone || null, role_id: form.role_id, is_active: form.is_active })
       message.success('已更新')
     } else {
-      await accountApi.create({ username: form.username, password: form.password, real_name: form.real_name || null, phone: form.phone || null, role_id: form.role_id, is_active: form.is_active })
+      await accountApi.create({ username, password: form.password, real_name: realName || null, phone: phone || null, role_id: form.role_id, is_active: form.is_active })
       message.success('已创建')
     }
     editVisible.value = false

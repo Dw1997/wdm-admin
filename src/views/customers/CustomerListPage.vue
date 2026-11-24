@@ -1,26 +1,52 @@
 <template>
-  <div class="page-container">
-    <div class="card-section">
+  <div class="page-container customer-list-page">
+    <div class="card-section filter-card">
       <div class="page-header">
         <h2 class="page-title">客户列表</h2>
-        <n-button type="primary" @click="openCreate">新建客户</n-button>
+        <div style="display: flex; gap: 8px">
+          <n-button @click="$router.push('/customers/tags')">客户标签</n-button>
+          <n-button type="primary" @click="openCreate">新建客户</n-button>
+        </div>
       </div>
       <div class="filter-bar">
-        <n-input v-model:value="keyword" placeholder="客户名称 / 手机号" clearable style="width: 240px" @keyup.enter="search" />
-        <n-select v-model:value="status" placeholder="状态" clearable style="width: 140px" :options="statusOpts" @update:value="search" />
-        <n-select v-model:value="salesFilter" placeholder="归属销售" clearable filterable style="width: 160px" :options="salesOpts" @update:value="search" />
-        <n-select v-model:value="wechatFilter" placeholder="微信绑定" clearable style="width: 130px" :options="wechatOpts" @update:value="search" />
+        <n-input v-model:value="keyword" placeholder="客户名称 / 手机号" clearable style="width: 220px" @keyup.enter="search" />
+        <n-select v-model:value="tagFilter" placeholder="客户标签" clearable filterable style="width: 150px" :options="tagOpts" @update:value="search" />
+        <n-select v-model:value="status" placeholder="状态" clearable style="width: 130px" :options="statusOpts" @update:value="search" />
+        <n-select v-model:value="salesFilter" placeholder="归属销售" clearable filterable style="width: 150px" :options="salesOpts" @update:value="search" />
+        <n-select v-model:value="wechatFilter" placeholder="微信绑定" clearable style="width: 120px" :options="wechatOpts" @update:value="search" />
         <n-button type="primary" size="small" @click="search">查询</n-button>
       </div>
-      <n-data-table :columns="columns" :data="pagedList" :loading="loading" :bordered="false" size="small" :scroll-x="1100" :row-key="(r:any)=>r.id" />
-      <div class="pagination-bar">
-        <n-pagination v-model:page="page" :item-count="list.length" :page-size="pageSize" />
+      <div v-if="checkedRowKeys.length" class="batch-bar">
+        <span class="batch-count">已勾选 <strong>{{ checkedRowKeys.length }}</strong> 位客户</span>
+        <n-button size="small" type="primary" secondary @click="openBatchTag">批量设置标签</n-button>
+        <n-button size="small" type="primary" secondary @click="openBatchLevel">批量设置等级价格</n-button>
+        <n-button size="small" text @click="checkedRowKeys = []">取消勾选</n-button>
       </div>
+    </div>
+
+    <div class="card-section table-card">
+      <n-data-table
+        class="customer-table"
+        flex-height
+        v-model:checked-row-keys="checkedRowKeys"
+        :columns="columns"
+        :data="pagedList"
+        :loading="loading"
+        :bordered="false"
+        size="small"
+        :scroll-x="1300"
+        :row-key="(r:any)=>r.id"
+      />
+    </div>
+
+    <div class="pagination-footer">
+      <span class="result-count">共 {{ list.length }} 位客户</span>
+      <n-pagination v-model:page="page" :item-count="list.length" :page-size="pageSize" />
     </div>
 
     <n-modal v-model:show="createVisible" title="新建客户" preset="card" style="width: 680px">
       <n-alert type="info" :bordered="false" style="margin-bottom: 12px">
-        手机号是客户之后微信登录时匹配档案的依据，请务必填写准确。保存后默认为待审核，客户微信登录时自动绑定，这里不能填写 UnionID / OpenID。
+        手机号是客户之后微信登录时匹配档案的依据，请务必填写准确。内部新建客户直接生效无需审核；客户标签可不填，等级价格不选默认使用「默认售价」，标签与等级价格互相独立。
       </n-alert>
       <n-form :model="createForm" label-placement="left" label-width="110">
         <n-grid :cols="2" :x-gap="16">
@@ -33,35 +59,48 @@
         </n-grid>
         <n-grid :cols="2" :x-gap="16">
           <n-gi>
+            <n-form-item label="客户标签">
+              <n-select v-model:value="createForm.tag_id" clearable filterable :options="activeTagOpts" placeholder="选填，单选（与等级价格无关）" />
+            </n-form-item>
+          </n-gi>
+          <n-gi>
+            <n-form-item label="等级价格">
+              <n-select v-model:value="createForm.level_id" clearable :options="levelOpts" placeholder="不选默认按「默认售价」计价" />
+            </n-form-item>
+          </n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
+          <n-gi>
             <n-form-item label="归属销售">
               <n-select v-model:value="createForm.sales_id" filterable :options="salesOpts" placeholder="默认归自己（自来客）" />
             </n-form-item>
           </n-gi>
           <n-gi>
-            <n-form-item label="客户等级">
-              <n-select v-model:value="createForm.level_id" clearable :options="levelOpts" placeholder="不选则待审核" />
+            <n-form-item label="关联供应商">
+              <n-select v-model:value="createForm.vendor_id" clearable filterable :options="vendorOpts" placeholder="既是供应商又是客户时关联（用于抵账）" />
             </n-form-item>
           </n-gi>
         </n-grid>
-        <n-form-item label="省/市/区">
-          <n-cascader
-            v-model:value="createForm.region_path"
-            :options="regionCascaderOptions"
+        <n-form-item label="介绍人 / 拉新老客">
+          <n-select
+            v-model:value="createForm.referrer_customer_id"
             clearable
-            placeholder="请选择省市区"
-            style="width: 100%"
-            @update:value="() => applyRegion(createForm)"
+            filterable
+            :options="referrerOpts"
+            placeholder="选填，填写后该客户首单送达自动给介绍人发拉新券"
           />
         </n-form-item>
-        <n-form-item label="镇/市场"><n-input v-model:value="createForm.town" /></n-form-item>
-        <n-form-item label="详细地址"><n-input v-model:value="createForm.detail_address" /></n-form-item>
-        <n-form-item label="收货地址"><n-input v-model:value="createForm.address" type="textarea" :rows="2" /></n-form-item>
+        <n-form-item label="收货地点">
+          <RegionPicker
+            v-model:value="createForm.delivery_region_id"
+            @change="(sel) => onDeliveryRegionChange(createForm, sel)"
+          />
+        </n-form-item>
+        <n-form-item label="详细地址"><n-input v-model:value="createForm.detail_address" placeholder="街道 / 门牌 / 摊位号" /></n-form-item>
         <n-grid :cols="2" :x-gap="16">
-          <n-gi><n-form-item label="默认配送"><n-select v-model:value="createForm.default_delivery_mode" :options="deliveryModeOpts" /></n-form-item></n-gi>
-          <n-gi><n-form-item label="送货地点"><n-cascader v-model:value="createForm.delivery_region_id" :options="regionCascaderOptions" clearable /></n-form-item></n-gi>
-          <n-gi><n-form-item label="默认零担线路"><n-select v-model:value="createForm.freight_line_id" :options="freightLineOpts" clearable @update:value="createForm.freight_stop_id = null" /></n-form-item></n-gi>
-          <n-gi><n-form-item label="默认下车点"><n-select v-model:value="createForm.freight_stop_id" :options="createStopOpts" clearable /></n-form-item></n-gi>
-          <n-gi><n-form-item label="默认运费方式"><n-select v-model:value="createForm.default_freight_mode" :options="freightModeOpts" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="默认配送"><n-select v-model:value="createForm.default_delivery_mode" :options="deliveryModeOpts" @update:value="() => onDeliveryModeChange(createForm)" /></n-form-item></n-gi>
+          <n-gi v-if="createForm.default_delivery_mode !== 'local'"><n-form-item label="默认物流线路"><n-select v-model:value="createForm.freight_line_id" :options="createLineOpts" clearable :disabled="!createForm.delivery_region_id" placeholder="不设则按收货地点自动匹配" /></n-form-item></n-gi>
+          <n-gi v-if="createForm.default_delivery_mode !== 'local'"><n-form-item label="默认运费方式"><n-select v-model:value="createForm.default_freight_mode" :options="freightModeOpts" /></n-form-item></n-gi>
         </n-grid>
       </n-form>
       <template #footer>
@@ -100,32 +139,28 @@
           <n-gi><n-form-item label="联系电话"><n-input v-model:value="form.contact_phone" /></n-form-item></n-gi>
         </n-grid>
         <n-grid :cols="2" :x-gap="16">
-          <n-gi><n-form-item label="渠道类型"><n-select v-model:value="form.channel_type" :options="channelOpts" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="客户标签"><n-select v-model:value="form.tag_id" clearable filterable :options="tagOpts" placeholder="选填，单选" /></n-form-item></n-gi>
           <n-gi><n-form-item label="状态"><n-select v-model:value="form.status" :options="statusOpts" /></n-form-item></n-gi>
         </n-grid>
         <n-grid :cols="2" :x-gap="16">
           <n-gi><n-form-item label="生效额度"><span>¥{{ Number(form.effective_credit_limit || 0).toLocaleString() }}</span><span style="margin-left: 8px; color: #999">在「客户额度」页设置</span></n-form-item></n-gi>
+          <n-gi><n-form-item label="关联供应商"><n-select v-model:value="form.vendor_id" clearable filterable :options="vendorOpts" placeholder="选填，用于两本账抵账" /></n-form-item></n-gi>
+        </n-grid>
+        <n-grid :cols="2" :x-gap="16">
           <n-gi><n-form-item label="邀请码"><n-input v-model:value="form.invite_code" /></n-form-item></n-gi>
         </n-grid>
-        <n-form-item label="省/市/区">
-          <n-cascader
-            v-model:value="form.region_path"
-            :options="regionCascaderOptions"
-            clearable
-            placeholder="请选择省市区"
-            style="width: 100%"
-            @update:value="() => applyRegion(form)"
+        <n-form-item label="收货地点">
+          <RegionPicker
+            v-model:value="form.delivery_region_id"
+            :fallback-label="[form.province, form.city, form.district, form.town].filter(Boolean).join(' / ')"
+            @change="(sel) => onDeliveryRegionChange(form, sel)"
           />
         </n-form-item>
-        <n-form-item label="镇/市场"><n-input v-model:value="form.town" /></n-form-item>
-        <n-form-item label="详细地址"><n-input v-model:value="form.detail_address" /></n-form-item>
-        <n-form-item label="收货地址"><n-input v-model:value="form.address" type="textarea" :rows="2" /></n-form-item>
+        <n-form-item label="详细地址"><n-input v-model:value="form.detail_address" placeholder="街道 / 门牌 / 摊位号" /></n-form-item>
         <n-grid :cols="2" :x-gap="16">
-          <n-gi><n-form-item label="默认配送"><n-select v-model:value="form.default_delivery_mode" :options="deliveryModeOpts" /></n-form-item></n-gi>
-          <n-gi><n-form-item label="送货地点"><n-cascader v-model:value="form.delivery_region_id" :options="regionCascaderOptions" clearable /></n-form-item></n-gi>
-          <n-gi><n-form-item label="默认零担线路"><n-select v-model:value="form.freight_line_id" :options="freightLineOpts" clearable @update:value="form.freight_stop_id = null" /></n-form-item></n-gi>
-          <n-gi><n-form-item label="默认下车点"><n-select v-model:value="form.freight_stop_id" :options="editStopOpts" clearable /></n-form-item></n-gi>
-          <n-gi><n-form-item label="默认运费方式"><n-select v-model:value="form.default_freight_mode" :options="freightModeOpts" /></n-form-item></n-gi>
+          <n-gi><n-form-item label="默认配送"><n-select v-model:value="form.default_delivery_mode" :options="deliveryModeOpts" @update:value="() => onDeliveryModeChange(form)" /></n-form-item></n-gi>
+          <n-gi v-if="form.default_delivery_mode !== 'local'"><n-form-item label="默认物流线路"><n-select v-model:value="form.freight_line_id" :options="editLineOpts" clearable :disabled="!form.delivery_region_id" placeholder="不设则按收货地点自动匹配" /></n-form-item></n-gi>
+          <n-gi v-if="form.default_delivery_mode !== 'local'"><n-form-item label="默认运费方式"><n-select v-model:value="form.default_freight_mode" :options="freightModeOpts" /></n-form-item></n-gi>
         </n-grid>
       </n-form>
       <template #footer>
@@ -134,14 +169,40 @@
       </template>
     </n-modal>
 
-    <n-modal v-model:show="levelVisible" title="设置客户等级" preset="card" style="width: 420px">
+    <n-modal v-model:show="levelVisible" title="设置等级价格" preset="card" style="width: 420px">
       <n-form label-placement="left" label-width="100">
         <n-form-item label="客户"><span>{{ levelTarget?.name }}</span></n-form-item>
-        <n-form-item label="客户等级"><n-select v-model:value="levelForm.level_id" :options="levelOpts" /></n-form-item>
+        <n-form-item label="等级价格"><n-select v-model:value="levelForm.level_id" :options="levelOpts" placeholder="请选择等级价格" /></n-form-item>
       </n-form>
       <template #footer>
         <n-button @click="levelVisible = false">取消</n-button>
         <n-button type="primary" :loading="saving" @click="onAssignLevel">保存</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="batchTagVisible" title="批量设置客户标签" preset="card" style="width: 440px">
+      <n-form label-placement="left" label-width="90">
+        <n-form-item label="已选客户"><span>共 {{ checkedRowKeys.length }} 位</span></n-form-item>
+        <n-form-item label="客户标签">
+          <n-select v-model:value="batchTagId" clearable filterable :options="activeTagOpts" placeholder="选择标签（留空表示清空所选客户标签）" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-button @click="batchTagVisible = false">取消</n-button>
+        <n-button type="primary" :loading="batchSaving" @click="onBatchAssignTag">确定</n-button>
+      </template>
+    </n-modal>
+
+    <n-modal v-model:show="batchLevelVisible" title="批量设置等级价格" preset="card" style="width: 440px">
+      <n-form label-placement="left" label-width="90">
+        <n-form-item label="已选客户"><span>共 {{ checkedRowKeys.length }} 位</span></n-form-item>
+        <n-form-item label="等级价格" required>
+          <n-select v-model:value="batchLevelId" :options="levelOpts" placeholder="请选择等级价格" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-button @click="batchLevelVisible = false">取消</n-button>
+        <n-button type="primary" :loading="batchSaving" @click="onBatchAssignLevel">确定</n-button>
       </template>
     </n-modal>
   </div>
@@ -149,43 +210,44 @@
 
 <script setup lang="ts">
 import { h, ref, reactive, computed, onMounted } from 'vue'
-import { NButton, NTag, NPopconfirm, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
-import { adminCustomerApi, deliveryApi, levelApi, regionApi, fetchAllPages, PAGE_SIZE } from '@/api'
-import type { AdminCustomer, LevelConfig, RecordFreightLine, RegionNode, SalesOption } from '@/types'
+import { NButton, NTag, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
+import { adminCustomerApi, customerTagApi, deliveryApi, levelApi, vendorApi, fetchAllPages, PAGE_SIZE } from '@/api'
+import type { AdminCustomer, CustomerTag, LevelConfig, RecordFreightLine, RegionSelection, SalesOption, Vendor } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import RegionPicker from '@/components/RegionPicker.vue'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
 const message = useMessage()
 const auth = useAuthStore()
 const list = ref<AdminCustomer[]>([])
 const levels = ref<LevelConfig[]>([])
-const regionOptions = ref<RegionNode[]>([])
+const tags = ref<CustomerTag[]>([])
 const freightLines = ref<RecordFreightLine[]>([])
 const keyword = ref('')
-const status = ref('')
+const tagFilter = ref<number | null>(null)
+const status = ref<string | null>(null)
 const salesFilter = ref<number | null>(null)
 const wechatFilter = ref<string | null>(null)
 const salesList = ref<SalesOption[]>([])
+const vendorList = ref<Vendor[]>([])
+const vendorOpts = computed<SelectOption[]>(() => vendorList.value.map((v) => ({ label: v.name, value: v.id })))
 const page = ref(1)
 const pageSize = PAGE_SIZE
 const loading = ref(false)
 const saving = ref(false)
+const batchSaving = ref(false)
+const checkedRowKeys = ref<number[]>([])
 const createVisible = ref(false)
 const editVisible = ref(false)
 const levelVisible = ref(false)
+const batchTagVisible = ref(false)
+const batchLevelVisible = ref(false)
+const batchTagId = ref<number | null>(null)
+const batchLevelId = ref<number | null>(null)
 const levelTarget = ref<AdminCustomer | null>(null)
-const createForm = reactive<any>({ name: '', phone: '', contact_name: '', contact_phone: '', sales_id: null, level_id: null, region_path: null, province: '', city: '', district: '', town: '', detail_address: '', address: '', default_delivery_mode: 'route', delivery_region_id: null, freight_line_id: null, freight_stop_id: null, default_freight_mode: 'deduct' })
-const form = reactive<any>({ id: 0, name: '', phone: '', wechat_bound: false, wechat_bound_at: null, sales_name: null, sales_is_admin: false, contact_name: '', contact_phone: '', channel_type: 'sales', status: 'active', credit_limit: 0, invite_code: '', region_path: null, province: '', city: '', district: '', town: '', detail_address: '', address: '', default_delivery_mode: 'route', delivery_region_id: null, freight_line_id: null, freight_stop_id: null, default_freight_mode: 'deduct' })
+const createForm = reactive<any>({ name: '', phone: '', contact_name: '', contact_phone: '', tag_id: null, vendor_id: null, sales_id: null, referrer_customer_id: null, level_id: null, region_path: null, province: '', city: '', district: '', town: '', detail_address: '', address: '', default_delivery_mode: 'route', delivery_region_id: null, freight_line_id: null, default_freight_mode: 'deduct' })
+const form = reactive<any>({ id: 0, name: '', phone: '', wechat_bound: false, wechat_bound_at: null, sales_name: null, sales_is_admin: false, contact_name: '', contact_phone: '', tag_id: null, vendor_id: null, status: 'active', credit_limit: 0, invite_code: '', region_path: null, province: '', city: '', district: '', town: '', detail_address: '', address: '', default_delivery_mode: 'route', delivery_region_id: null, freight_line_id: null, default_freight_mode: 'deduct' })
 const levelForm = reactive<any>({ level_id: null })
-
-function mapRegion(node: RegionNode): any {
-  return {
-    label: node.name,
-    value: node.id,
-    children: node.children?.length ? node.children.map(mapRegion) : undefined,
-  }
-}
-
-const regionCascaderOptions = computed(() => regionOptions.value.map(mapRegion))
 
 const statusOpts = [
   { label: '待审核', value: 'pending' },
@@ -194,33 +256,76 @@ const statusOpts = [
   { label: '禁止登录', value: 'login_disabled' },
 ]
 const salesOpts = computed<SelectOption[]>(() => salesList.value.map((o) => ({ label: o.is_admin ? `管理员·${o.name}` : o.name, value: o.id })))
+const referrerOpts = computed<SelectOption[]>(() =>
+  list.value
+    .filter((c) => c.status === 'active' && !c.is_system)
+    .map((c) => ({ label: `${c.name}${c.phone ? `（${c.phone}）` : ''}`, value: c.id })),
+)
 const wechatOpts = [{ label: '已绑定', value: 'true' }, { label: '未绑定', value: 'false' }]
-const channelOpts = [{ label: '销售', value: 'sales' }, { label: '自用', value: 'self_use' }]
-const deliveryModeOpts = [{ label: '开车自送', value: 'route' }, { label: '发物流', value: 'freight' }, { label: '自送', value: 'local' }]
+const tagOpts = computed<SelectOption[]>(() => tags.value.map((t) => ({ label: t.is_active ? t.name : `${t.name}（已停用）`, value: t.id })))
+const activeTagOpts = computed<SelectOption[]>(() => tags.value.filter((t) => t.is_active).map((t) => ({ label: t.name, value: t.id })))
+const deliveryModeOpts = [{ label: '开车自送', value: 'route' }, { label: '发物流', value: 'freight' }, { label: '城区自送', value: 'local' }]
 const freightModeOpts = [{ label: '从货款扣', value: 'deduct' }, { label: '店家承担', value: 'store_paid' }, { label: '客户到付', value: 'customer_paid' }]
-const freightLineOpts = computed(() => freightLines.value.map(line => ({ label: line.name, value: line.id })))
-const stopOptions = (lineId: number | null) => freightLines.value.find(line => line.id === lineId)?.stops.map(stop => ({ label: `${stop.town_name} ${stop.drop_point || ''}`, value: stop.id })) || []
-const createStopOpts = computed(() => stopOptions(createForm.freight_line_id))
-const editStopOpts = computed(() => stopOptions(form.freight_line_id))
-const levelOpts = computed<SelectOption[]>(() => levels.value.map((l) => ({ label: `${l.nickname} (${l.level_id})`, value: l.id, disabled: !l.is_active })))
+const lineOptionsFor = (regionId: number | null | undefined) =>
+  freightLines.value
+    .filter((line) => line.is_active && (regionId == null || line.stops.some((stop) => stop.town_region_id === regionId)))
+    .map((line) => ({ label: line.name, value: line.id }))
+const createLineOpts = computed(() => lineOptionsFor(createForm.delivery_region_id))
+const editLineOpts = computed(() => lineOptionsFor(form.delivery_region_id))
+
+function onDeliveryRegionChange(target: any, sel: RegionSelection | null) {
+  target.province = sel?.province || ''
+  target.city = sel?.city || ''
+  target.district = sel?.district || ''
+  target.town = sel?.town || ''
+  if (!target.freight_line_id) return
+  const line = freightLines.value.find((item) => item.id === target.freight_line_id)
+  if (!line || !line.stops.some((stop) => stop.town_region_id === target.delivery_region_id)) {
+    target.freight_line_id = null
+  }
+}
+
+function onDeliveryModeChange(target: any) {
+  if (target.default_delivery_mode === 'local') {
+    target.freight_line_id = null
+  }
+}
+
+function composeAddress(target: any): string | null {
+  const parts = [target.province, target.city, target.district, target.town, target.detail_address]
+    .map((s) => (s || '').trim())
+    .filter(Boolean)
+  return parts.length ? parts.join('') : null
+}
+const levelOpts = computed<SelectOption[]>(() =>
+  levels.value
+    .filter((l) => l.level_id !== 'walk_in')
+    .map((l) => ({ label: `${l.nickname} (${l.level_id})`, value: l.id, disabled: !l.is_active }))
+)
 
 const columns = computed<DataTableColumns<AdminCustomer>>(() => [
+  { type: 'selection', disabled: (r) => !!r.is_system },
   { title: 'ID', key: 'id', width: 60 },
   { title: '客户名称', key: 'name', width: 130, ellipsis: { tooltip: true } },
   { title: '联系人', key: 'contact_name', width: 100, render: (r) => r.contact_name || '—' },
   { title: '手机号', key: 'phone', width: 130 },
-  { title: '渠道', key: 'channel_type', width: 80, render: (r) => h(NTag, { size: 'small', type: r.channel_type === 'sales' ? 'primary' : 'default' }, { default: () => r.channel_type === 'sales' ? '销售' : '自用' }) },
+  {
+    title: '属地',
+    key: 'delivery_region',
+    width: 120,
+    ellipsis: { tooltip: true },
+    render: (r) => r.town || r.district || r.city || r.province || '—',
+  },
+  { title: '客户标签', key: 'tag_name', width: 110, render: (r) => r.tag_name ? h(NTag, { size: 'small', bordered: false }, { default: () => r.tag_name }) : '—' },
   { title: '归属销售', key: 'sales_name', width: 110, render: (r) => r.sales_name ? (r.sales_is_admin ? `管理员·${r.sales_name}` : r.sales_name) : '—' },
+  { title: '介绍人', key: 'referrer_customer_name', width: 110, render: (r) => r.referrer_customer_name || '—' },
   { title: '微信', key: 'wechat_bound', width: 80, render: (r) => h(NTag, { size: 'small', type: r.wechat_bound ? 'success' : 'default' }, { default: () => r.wechat_bound ? '已绑定' : '未绑定' }) },
-  { title: '等级', key: 'level_nickname', width: 110, render: (r) => r.level_nickname || '—' },
+  { title: '等级价格', key: 'level_nickname', width: 120, ellipsis: { tooltip: true }, render: (r) => r.level_nickname || '—' },
   { title: '状态', key: 'status', width: 100, render: (r) => h(NTag, { size: 'small', type: statusType(r.status) }, { default: () => statusLabel(r.status) }) },
-  { title: '操作', key: 'actions', width: 190, fixed: 'right', render: (r) => h('div', [
-    h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
-    h(NButton, { size: 'small', text: true, type: 'primary', style: 'margin-left:8px', onClick: () => openLevel(r) }, { default: () => '设置等级' }),
-    h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, {
-      default: () => '确认删除?',
-      trigger: () => h(NButton, { size: 'small', text: true, type: 'error', style: 'margin-left:8px' }, { default: () => '删除' }),
-    }),
+  { title: '操作', key: 'actions', width: 175, fixed: 'right', render: (r) => actionBar([
+    actionIcon({ icon: 'edit', label: '编辑', onClick: () => openEdit(r) }),
+    h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openLevel(r) }, { default: () => '设置等级价格' }),
+    actionIcon({ icon: 'delete', label: '删除', confirm: '确认删除?', onClick: () => onDelete(r) }),
   ]) },
 ])
 
@@ -249,6 +354,7 @@ async function reload() {
     list.value = await fetchAllPages((p) =>
       adminCustomerApi.list({
         keyword: keyword.value || undefined,
+        tag_id: tagFilter.value ?? undefined,
         status: status.value || undefined,
         sales_id: salesFilter.value ?? undefined,
         wechat_bound: wechatFilter.value == null ? undefined : wechatFilter.value === 'true',
@@ -256,6 +362,8 @@ async function reload() {
         page_size: pageSize,
       }),
     )
+    const validIds = new Set(list.value.map((c) => c.id))
+    checkedRowKeys.value = checkedRowKeys.value.filter((id) => validIds.has(id))
   } finally { loading.value = false }
 }
 
@@ -265,65 +373,16 @@ async function loadLevels() {
   levels.value = await levelApi.list()
 }
 
+async function loadTags() {
+  tags.value = await customerTagApi.list()
+}
+
 async function loadSales() {
   salesList.value = await adminCustomerApi.salesOptions()
 }
 
-async function loadRegions() {
-  regionOptions.value = await regionApi.tree()
-}
-
-function findRegionName(nodes: RegionNode[], id: number): string | null {
-  for (const node of nodes) {
-    if (node.id === id) return node.name
-    const found = node.children ? findRegionName(node.children, id) : null
-    if (found) return found
-  }
-  return null
-}
-
-function findRegionPath(nodes: RegionNode[], id: number, path: number[] = []): number[] | null {
-  for (const node of nodes) {
-    const p = [...path, node.id]
-    if (node.id === id) return p
-    if (node.children) {
-      const found = findRegionPath(node.children, id, p)
-      if (found) return found
-    }
-  }
-  return null
-}
-
-function applyRegion(target: any) {
-  // 单选 n-cascader 的 value 是叶子区域 id（非路径数组），需回溯完整路径取省市区名
-  const ids = target.region_path == null ? [] : findRegionPath(regionOptions.value, Number(target.region_path)) || []
-  const names = ids.map((id: number) => findRegionName(regionOptions.value, id)).filter(Boolean)
-  target.province = names[0] || ''
-  target.city = names[1] || ''
-  target.district = names[2] || ''
-}
-
-function regionIdByNames(nodes: RegionNode[], province: string, city?: string, district?: string): number | null {
-  for (const p of nodes) {
-    if (p.name === province) {
-      if (!city) return p.id
-      for (const c of p.children || []) {
-        if (c.name === city) {
-          if (!district) return c.id
-          for (const d of c.children || []) {
-            if (d.name === district) return d.id
-          }
-          return c.id
-        }
-      }
-      return p.id
-    }
-  }
-  return null
-}
-
 function openCreate() {
-  Object.assign(createForm, { name: '', phone: '', contact_name: '', contact_phone: '', sales_id: null, level_id: null, region_path: null, province: '', city: '', district: '', town: '', detail_address: '', address: '', default_delivery_mode: 'route', delivery_region_id: null, freight_line_id: null, freight_stop_id: null, default_freight_mode: 'deduct' })
+  Object.assign(createForm, { name: '', phone: '', contact_name: '', contact_phone: '', tag_id: null, vendor_id: null, sales_id: null, referrer_customer_id: null, level_id: null, region_path: null, province: '', city: '', district: '', town: '', detail_address: '', address: '', default_delivery_mode: 'route', delivery_region_id: null, freight_line_id: null, default_freight_mode: 'deduct' })
   // 默认归当前登录账号（自来客）；账号不在可选列表里时留空，由后端按当前账号处理
   const me = auth.user?.id
   if (me != null && salesList.value.some((o) => o.id === me)) createForm.sales_id = me
@@ -342,21 +401,24 @@ async function onCreate() {
       phone: createForm.phone,
       contact_name: createForm.contact_name || null,
       contact_phone: createForm.contact_phone || null,
+      tag_id: createForm.tag_id ?? null,
+      vendor_id: createForm.vendor_id ?? null,
       sales_id: createForm.sales_id ?? null,
+      referrer_customer_id: createForm.referrer_customer_id ?? null,
       level_id: createForm.level_id ?? null,
       province: createForm.province || null,
       city: createForm.city || null,
       district: createForm.district || null,
       town: createForm.town || null,
       detail_address: createForm.detail_address || null,
-      address: createForm.address || null,
+      address: composeAddress(createForm),
       default_delivery_mode: createForm.default_delivery_mode,
       delivery_region_id: createForm.delivery_region_id,
-      freight_line_id: createForm.freight_line_id,
-      freight_stop_id: createForm.freight_stop_id,
-      default_freight_mode: createForm.default_freight_mode,
+      freight_line_id: createForm.default_delivery_mode === 'local' ? null : createForm.freight_line_id,
+      default_freight_mode: createForm.default_delivery_mode === 'local' ? 'deduct' : createForm.default_freight_mode,
     })
-    message.success(res.customer.status === 'pending' ? '已创建，等待审核' : '已创建')
+    message.success('已创建并生效')
+    for (const warning of res.warnings || []) message.warning(warning.message)
     createVisible.value = false
     reload()
   } finally { saving.value = false }
@@ -364,19 +426,21 @@ async function onCreate() {
 
 function openEdit(r: AdminCustomer) {
   Object.assign(form, JSON.parse(JSON.stringify(r)))
-  form.region_path = regionIdByNames(regionOptions.value, form.province || '', form.city || '', form.district || '')
+  const line = freightLines.value.find((item) => item.id === form.freight_line_id)
+  if (line && !line.stops.some((stop) => stop.town_region_id === form.delivery_region_id)) form.freight_line_id = null
   editVisible.value = true
 }
 
 async function onSave() {
   saving.value = true
   try {
-    await adminCustomerApi.update(form.id, {
+    const res = await adminCustomerApi.update(form.id, {
       name: form.name,
       phone: form.phone,
       contact_name: form.contact_name || null,
       contact_phone: form.contact_phone || null,
-      channel_type: form.channel_type,
+      tag_id: form.tag_id ?? null,
+      vendor_id: form.vendor_id ?? null,
       status: form.status,
       invite_code: form.invite_code || null,
       province: form.province || null,
@@ -384,13 +448,13 @@ async function onSave() {
       district: form.district || null,
       town: form.town || null,
       detail_address: form.detail_address || null,
-      address: form.address || null,
+      address: composeAddress(form),
       default_delivery_mode: form.default_delivery_mode,
       delivery_region_id: form.delivery_region_id,
-      freight_line_id: form.freight_line_id,
-      freight_stop_id: form.freight_stop_id,
-      default_freight_mode: form.default_freight_mode,
+      freight_line_id: form.default_delivery_mode === 'local' ? null : form.freight_line_id,
+      default_freight_mode: form.default_delivery_mode === 'local' ? 'deduct' : form.default_freight_mode,
     })
+    for (const warning of res.warnings || []) message.warning(warning.message)
     message.success('已更新')
     editVisible.value = false
     reload()
@@ -419,17 +483,158 @@ function openLevel(r: AdminCustomer) {
 
 async function onAssignLevel() {
   if (!levelTarget.value || !levelForm.level_id) {
-    message.warning('请选择客户等级')
+    message.warning('请选择等级价格')
     return
   }
   saving.value = true
   try {
     await adminCustomerApi.assignLevel(levelTarget.value.id, levelForm.level_id)
-    message.success('等级已更新')
+    message.success('等级价格已更新')
     levelVisible.value = false
     reload()
   } finally { saving.value = false }
 }
 
-onMounted(() => { loadLevels(); loadRegions(); loadSales(); reload(); deliveryApi.freightLines().then(lines => { freightLines.value = lines }) })
+function openBatchTag() {
+  if (!checkedRowKeys.value.length) return
+  batchTagId.value = null
+  batchTagVisible.value = true
+}
+
+function openBatchLevel() {
+  if (!checkedRowKeys.value.length) return
+  batchLevelId.value = null
+  batchLevelVisible.value = true
+}
+
+async function runBatch(ids: number[], task: (id: number) => Promise<unknown>): Promise<{ ok: number; failedIds: number[] }> {
+  let ok = 0
+  const failedIds: number[] = []
+  const chunkSize = 5
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const results = await Promise.allSettled(chunk.map((id) => task(id)))
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled') ok += 1
+      else failedIds.push(chunk[idx])
+    })
+  }
+  return { ok, failedIds }
+}
+
+async function onBatchAssignTag() {
+  if (!checkedRowKeys.value.length) return
+  batchSaving.value = true
+  try {
+    const ids = [...checkedRowKeys.value]
+    const { ok, failedIds } = await runBatch(ids, (id) => adminCustomerApi.update(id, { tag_id: batchTagId.value ?? null }))
+    if (failedIds.length === 0) {
+      message.success(`已批量${batchTagId.value == null ? '清空' : '设置'} ${ok} 位客户的标签`)
+      batchTagVisible.value = false
+      checkedRowKeys.value = []
+    } else {
+      message.warning(`成功 ${ok} 位，失败 ${failedIds.length} 位`)
+      checkedRowKeys.value = failedIds
+    }
+    reload()
+  } finally { batchSaving.value = false }
+}
+
+async function onBatchAssignLevel() {
+  if (!checkedRowKeys.value.length) return
+  if (!batchLevelId.value) {
+    message.warning('请选择等级价格')
+    return
+  }
+  const targetLevelId = batchLevelId.value
+  batchSaving.value = true
+  try {
+    const ids = [...checkedRowKeys.value]
+    const { ok, failedIds } = await runBatch(ids, (id) => adminCustomerApi.assignLevel(id, targetLevelId))
+    if (failedIds.length === 0) {
+      message.success(`已批量设置 ${ok} 位客户的等级价格`)
+      batchLevelVisible.value = false
+      checkedRowKeys.value = []
+    } else {
+      message.warning(`成功 ${ok} 位，失败 ${failedIds.length} 位`)
+      checkedRowKeys.value = failedIds
+    }
+    reload()
+  } finally { batchSaving.value = false }
+}
+
+onMounted(() => { loadLevels(); loadTags(); loadSales(); reload(); deliveryApi.freightLines({ is_active: true }).then(lines => { freightLines.value = lines }); fetchAllPages<Vendor>((p) => vendorApi.list({ page: p, page_size: PAGE_SIZE })).then((vs) => { vendorList.value = vs }).catch(() => {}) })
 </script>
+
+<style scoped>
+.customer-list-page {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+.filter-card {
+  flex-shrink: 0;
+  z-index: 10;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.filter-card .page-header {
+  margin-bottom: 12px;
+}
+
+.filter-card .filter-bar {
+  margin-bottom: 0;
+}
+
+.batch-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+.batch-count {
+  font-size: 13px;
+  color: var(--text-2);
+  margin-right: 4px;
+}
+
+.table-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.customer-table {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.pagination-footer {
+  flex-shrink: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 -2px 10px rgba(15, 23, 42, 0.06);
+}
+
+.result-count {
+  font-size: 12px;
+  color: var(--text-3);
+}
+</style>

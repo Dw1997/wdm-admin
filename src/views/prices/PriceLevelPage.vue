@@ -4,9 +4,12 @@
     <div class="card-section" v-if="view === 'list'">
       <div class="page-header">
         <h2 class="page-title">等级价格</h2>
+        <div class="header-actions">
+          <n-button type="primary" @click="openCreateLevel">新建等级</n-button>
+        </div>
       </div>
       <n-alert type="info" :bordered="false" style="margin-bottom: 12px">
-        点击等级行进入价格详情：可为该等级下每个 SKU 设置「建议零售价 ± 百分比 / ± 固定金额」规则，SKU 专属规则优先于等级默认规则。
+        等级价格统一由管理员维护。客户绑定某个等级价格后，成交价按该等级规则计算（除非为该客户单独设置了专属价格）。点击等级行或「价格详情」可进入为 SKU 设置等级价格。
       </n-alert>
       <n-data-table
         :columns="levelColumns"
@@ -28,19 +31,30 @@
             <h2 class="page-title" style="margin: 0">{{ currentLevel.nickname }} · 等级价格详情</h2>
             <n-tag size="small" :bordered="false">{{ currentLevel.level_id }}</n-tag>
           </div>
-          <n-button size="small" @click="openPreview">价格预览</n-button>
+          <div class="header-actions">
+            <n-button size="small" @click="openEditLevel(currentLevel)">编辑等级</n-button>
+            <n-button size="small" @click="openPreview">价格预览</n-button>
+          </div>
         </div>
         <n-descriptions :column="3" bordered size="small">
           <n-descriptions-item label="客户数">{{ currentLevel.customer_count }}</n-descriptions-item>
-          <n-descriptions-item label="创建者">{{ currentLevel.created_by_name || (currentLevel.is_system ? '系统' : '—') }}</n-descriptions-item>
-          <n-descriptions-item label="类型">{{ CUSTOMER_LEVEL_TYPE[currentLevel.type]?.label || currentLevel.type }}</n-descriptions-item>
+          <n-descriptions-item label="默认额度">
+            {{ currentLevel.default_credit_limit != null ? `¥${Number(currentLevel.default_credit_limit).toLocaleString()}` : '—' }}
+          </n-descriptions-item>
+          <n-descriptions-item label="适用标签（参考）">
+            <span v-if="!(currentLevel.applicable_tags && currentLevel.applicable_tags.length)">—</span>
+            <n-space v-else :size="4">
+              <n-tag v-for="t in currentLevel.applicable_tags" :key="t.id" size="small" :bordered="false">{{ t.name }}</n-tag>
+            </n-space>
+          </n-descriptions-item>
+          <n-descriptions-item v-if="currentLevel.description" label="适用说明/备注" :span="3">{{ currentLevel.description }}</n-descriptions-item>
         </n-descriptions>
       </div>
 
       <div class="card-section">
         <h3 class="page-title" style="margin-bottom: 12px">等级默认规则</h3>
         <n-alert type="info" :bordered="false" style="margin-bottom: 12px">
-          默认规则作用于所有未单独设置价格的 SKU：等级价 = 建议零售价 ± 百分比 / ± 固定金额（负数下调，下限 0）。
+          默认规则作用于所有未单独设置价格的 SKU：等级价 = 建议零售价 ± 百分比 / ± 固定金额（负数下调，最终不低于最低售价）。
         </n-alert>
         <div class="default-rule-bar">
           <n-tag v-if="!defaultRule" size="small" type="warning" :bordered="false">未设置（按建议零售价销售）</n-tag>
@@ -72,9 +86,52 @@
       </div>
     </template>
 
+    <!-- 新建 / 编辑等级弹窗 -->
+    <n-modal v-model:show="levelEditVisible" :title="levelForm.id ? '编辑等级' : '新建等级'" preset="card" style="width: 580px">
+      <n-form :model="levelForm" label-placement="left" label-width="120">
+        <n-form-item label="等级名称" required>
+          <n-input v-model:value="levelForm.nickname" placeholder="请输入等级显示名称" />
+        </n-form-item>
+        <n-form-item label="编码" required>
+          <n-input
+            v-model:value="levelForm.level_id"
+            :disabled="isBuiltinLevel(levelForm.level_id) && !!levelForm.id"
+            placeholder="等级业务编码，如 vip（仅支持字母/数字/下划线/中划线）"
+          />
+        </n-form-item>
+        <n-form-item label="适用客户标签">
+          <n-select
+            v-model:value="levelForm.applicable_tag_ids"
+            multiple
+            clearable
+            filterable
+            :options="tagOpts"
+            placeholder="选填，可多选，仅作人工参考不限制客户绑定"
+          />
+        </n-form-item>
+        <n-form-item label="适用说明/备注">
+          <n-input v-model:value="levelForm.description" type="textarea" :rows="2" placeholder="选填，可自由填写适用客户说明或备注" />
+        </n-form-item>
+        <n-form-item label="默认额度">
+          <n-input-number v-model:value="levelForm.default_credit_limit" :min="0" :step="1000" style="width: 200px">
+            <template #suffix>元</template>
+          </n-input-number>
+          <span style="margin-left: 8px; color: var(--text-3); font-size: 12px">客户未单独设额度时默认按此额度</span>
+        </n-form-item>
+        <n-form-item label="启用">
+          <n-switch v-model:value="levelForm.is_active" :disabled="isBuiltinLevel(levelForm.level_id) && !!levelForm.id" />
+        </n-form-item>
+      </n-form>
+      <template #footer>
+        <n-button @click="levelEditVisible = false">取消</n-button>
+        <n-button type="primary" :loading="levelSaving" @click="onSaveLevel">保存</n-button>
+      </template>
+    </n-modal>
+
+    <!-- 价格预览弹窗 -->
     <n-modal v-model:show="showPreview" preset="card" title="等级价格预览" style="width: 480px">
       <n-form label-placement="left" label-width="90">
-        <n-form-item label="客户等级">
+        <n-form-item label="等级价格">
           <n-select :value="currentLevel?.id" :options="levelSelectOptions" disabled placeholder="" />
         </n-form-item>
         <n-form-item label="SKU">
@@ -105,27 +162,35 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, onMounted } from 'vue'
+import { h, ref, reactive, computed, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   NButton, NInput, NInputNumber, NSelect, NDataTable, NTag, useMessage, useDialog,
-  type DataTableColumns,
+  type DataTableColumns, type SelectOption,
 } from 'naive-ui'
-import { levelApi, levelPriceApi, productApi, fetchAllPages, PAGE_SIZE } from '@/api'
-import { formatDate } from '@/utils/format'
-import { PRICE_METHOD, RULE_SOURCE, CUSTOMER_LEVEL_TYPE } from '@/utils/dict'
+import { levelApi, levelPriceApi, productApi, customerTagApi, fetchAllPages, PAGE_SIZE } from '@/api'
+import { PRICE_METHOD, RULE_SOURCE } from '@/utils/dict'
 import type {
-  LevelStats, LevelPrice, LevelPriceRulePreview, PriceMethod, ProductSPU, ProductSKU,
+  CustomerTag, LevelStats, LevelPrice, LevelPriceRulePreview, PriceMethod, ProductSPU, ProductSKU,
 } from '@/types'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
+const BUILTIN_LEVEL_CODES = new Set(['default_retail', 'walk_in'])
+const isBuiltinLevel = (code?: string | null) => Boolean(code && BUILTIN_LEVEL_CODES.has(code))
+
+const route = useRoute()
+const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const loading = ref(false)
 const saving = ref(false)
+const levelSaving = ref(false)
 const previewing = ref(false)
 
 // 视图状态：list=等级列表，detail=某等级的 SKU 价格详情
 const view = ref<'list' | 'detail'>('list')
 const levels = ref<LevelStats[]>([])
+const tags = ref<CustomerTag[]>([])
 const currentLevel = ref<LevelStats | null>(null)
 
 const rules = ref<LevelPrice[]>([])
@@ -137,6 +202,101 @@ const methodOptions = [
   { label: PRICE_METHOD.amount, value: 'amount' },
 ]
 
+const tagOpts = computed<SelectOption[]>(() =>
+  tags.value.map((t) => ({ label: t.is_active ? t.name : `${t.name}（已停用）`, value: t.id })),
+)
+
+// ---------- 新建 / 编辑等级 ----------
+const levelEditVisible = ref(false)
+const levelForm = reactive<{
+  id: number
+  level_id: string
+  nickname: string
+  applicable_tag_ids: number[]
+  description: string
+  default_credit_limit: number
+  is_active: boolean
+}>({
+  id: 0,
+  level_id: '',
+  nickname: '',
+  applicable_tag_ids: [],
+  description: '',
+  default_credit_limit: 1000,
+  is_active: true,
+})
+
+function openCreateLevel() {
+  Object.assign(levelForm, {
+    id: 0,
+    level_id: '',
+    nickname: '',
+    applicable_tag_ids: [],
+    description: '',
+    default_credit_limit: 1000,
+    is_active: true,
+  })
+  levelEditVisible.value = true
+}
+
+function openEditLevel(row: LevelStats) {
+  Object.assign(levelForm, {
+    id: row.id,
+    level_id: row.level_id,
+    nickname: row.nickname,
+    applicable_tag_ids: [...(row.applicable_tag_ids || [])],
+    description: row.description || '',
+    default_credit_limit: Number(row.default_credit_limit ?? 1000),
+    is_active: row.is_active !== false,
+  })
+  levelEditVisible.value = true
+}
+
+async function onSaveLevel() {
+  const nickname = String(levelForm.nickname || '').trim()
+  const levelId = String(levelForm.level_id || '').trim()
+  if (!nickname || !levelId) {
+    message.warning('请填写等级显示名称和业务编码')
+    return
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(levelId)) {
+    message.warning('业务编码仅支持字母、数字、下划线和中划线')
+    return
+  }
+  const payload = {
+    level_id: levelId,
+    nickname,
+    applicable_tag_ids: levelForm.applicable_tag_ids,
+    description: levelForm.description || null,
+    default_credit_limit: levelForm.default_credit_limit ?? 1000,
+    is_active: levelForm.is_active,
+  }
+  levelSaving.value = true
+  try {
+    if (levelForm.id) {
+      await levelApi.update(levelForm.id, payload)
+      message.success('等级已更新')
+    } else {
+      await levelApi.create(payload)
+      message.success('等级已创建')
+    }
+    levelEditVisible.value = false
+    await loadLevels()
+    if (currentLevel.value) {
+      const updated = levels.value.find((l) => l.id === currentLevel.value!.id)
+      if (updated) currentLevel.value = updated
+    }
+  } finally {
+    levelSaving.value = false
+  }
+}
+
+async function onDeleteLevel(row: LevelStats) {
+  await levelApi.remove(row.id)
+  message.success('等级已删除')
+  await loadLevels()
+}
+
 // ---------- 等级列表 ----------
 const levelRowProps = (row: LevelStats) => ({
   style: 'cursor: pointer',
@@ -144,29 +304,57 @@ const levelRowProps = (row: LevelStats) => ({
 })
 
 const levelColumns = computed<DataTableColumns<LevelStats>>(() => [
-  { title: '等级编码', key: 'level_id', width: 110 },
-  { title: '等级名称', key: 'nickname', width: 140, ellipsis: { tooltip: true } },
   {
-    title: '类型', key: 'type', width: 90,
-    render: (r) => h(NTag, { size: 'small', type: CUSTOMER_LEVEL_TYPE[r.type]?.type ?? 'default', bordered: false }, { default: () => CUSTOMER_LEVEL_TYPE[r.type]?.label || r.type }),
+    title: '等级名称', key: 'nickname', width: 160, ellipsis: { tooltip: true },
+    render: (r) => h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+      h('span', r.nickname),
+      r.level_id === 'default_retail' ? h(NTag, { size: 'tiny', type: 'info', bordered: false }, { default: () => '内置默认' }) : null,
+      r.level_id === 'walk_in' ? h(NTag, { size: 'tiny', type: 'default', bordered: false }, { default: () => '内置散客' }) : null,
+    ]),
   },
-  { title: '客户数', key: 'customer_count', width: 90 },
-  { title: '创建者', key: 'created_by_name', width: 120, render: (r) => r.created_by_name || (r.is_system ? '系统' : '—') },
+  { title: '等级编码', key: 'level_id', width: 120, ellipsis: { tooltip: true } },
   {
-    title: '状态', key: 'is_active', width: 90,
-    render: (r) => h(NTag, { size: 'small', type: r.is_active === false ? 'error' : 'success', bordered: false }, { default: () => (r.is_active === false ? '已禁用' : '启用') }),
+    title: '适用客户标签（参考）', key: 'applicable_tags', width: 200,
+    render: (r) => {
+      const items = r.applicable_tags || []
+      if (!items.length) return '—'
+      return h('div', { style: 'display:flex;flex-wrap:wrap;gap:4px' }, items.map((t) =>
+        h(NTag, { size: 'small', bordered: false }, { default: () => t.name }),
+      ))
+    },
   },
-  { title: '创建时间', key: 'created_at', width: 160, render: (r) => (r.created_at ? formatDate(r.created_at) : '—') },
   {
-    title: '操作', key: 'actions', width: 110,
-    render: (r) => h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openDetail(r) }, { default: () => '价格详情' }),
+    title: '默认额度', key: 'default_credit_limit', width: 100,
+    render: (r) => r.default_credit_limit != null ? `¥${Number(r.default_credit_limit).toLocaleString()}` : '—',
+  },
+  { title: '客户数', key: 'customer_count', width: 80 },
+  { title: '适用说明', key: 'description', ellipsis: { tooltip: true }, render: (r) => r.description || '—' },
+  {
+    title: '状态', key: 'is_active', width: 80,
+    render: (r) => h(NTag, { size: 'small', type: r.is_active === false ? 'error' : 'success', bordered: false }, { default: () => (r.is_active === false ? '禁用' : '启用') }),
+  },
+  {
+    title: '操作', key: 'actions', width: 145,
+    render: (r) => actionBar([
+      h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openDetail(r) }, { default: () => '价格详情' }),
+      actionIcon({ icon: 'edit', label: '编辑', onClick: () => openEditLevel(r) }),
+      !isBuiltinLevel(r.level_id) && actionIcon({
+        icon: 'delete',
+        label: '删除',
+        confirm: '确认删除该等级？',
+        onClick: () => onDeleteLevel(r),
+      }),
+    ], { stopPropagation: true }),
   },
 ])
 
 async function loadLevels() {
   loading.value = true
   try {
-    levels.value = await levelApi.stats()
+    ;[levels.value, tags.value] = await Promise.all([
+      levelApi.stats(),
+      customerTagApi.list(),
+    ])
   } finally {
     loading.value = false
   }
@@ -239,6 +427,9 @@ function openDetail(row: LevelStats) {
 function backToList() {
   view.value = 'list'
   currentLevel.value = null
+  if (route.query.levelId) {
+    router.replace({ path: '/prices/levels' })
+  }
   loadLevels()
 }
 
@@ -389,10 +580,10 @@ const skuColumns = computed<DataTableColumns<SkuRuleRow>>(() => [
     render: (r) => h('span', { style: 'color:#ea580c;font-weight:600' }, `¥${levelPriceOf(r).toFixed(2)}`),
   },
   {
-    title: '操作', key: 'actions', width: 150,
-    render: (r) => h('div', { style: 'display:flex;gap:8px' }, [
-      h(NButton, { size: 'small', text: true, type: 'primary', loading: saving.value, onClick: () => saveSkuRule(r) }, { default: () => '保存规则' }),
-      r.rule ? h(NButton, { size: 'small', text: true, type: 'error', onClick: () => removeSkuRule(r) }, { default: () => '清除' }) : null,
+    title: '操作', key: 'actions', width: 96,
+    render: (r) => actionBar([
+      actionIcon({ icon: 'save', label: '保存规则', loading: saving.value, onClick: () => saveSkuRule(r) }),
+      r.rule && actionIcon({ icon: 'delete', label: '清除', onClick: () => removeSkuRule(r) }),
     ]),
   },
 ])
@@ -435,10 +626,27 @@ async function doPreview() {
   }
 }
 
-onMounted(loadLevels)
+function tryOpenByQuery() {
+  const raw = route.query.levelId
+  if (!raw) return
+  const targetId = Number(raw)
+  if (!Number.isFinite(targetId)) return
+  const matched = levels.value.find((l) => l.id === targetId)
+  if (matched) openDetail(matched)
+}
+
+watch(() => route.query.levelId, () => {
+  if (levels.value.length) tryOpenByQuery()
+})
+
+onMounted(async () => {
+  await loadLevels()
+  tryOpenByQuery()
+})
 </script>
 
 <style scoped>
+.header-actions { display: flex; align-items: center; gap: 8px; }
 .default-rule-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rule-hint { font-size: 12px; color: var(--text-3); }
 </style>

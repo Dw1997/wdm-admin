@@ -55,12 +55,13 @@
 
 <script setup lang="ts">
 import { h, ref, reactive, computed, onMounted } from 'vue'
-import { NButton, NPopconfirm, NTag, useMessage, type DataTableColumns } from 'naive-ui'
+import { NButton, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { vendorApi } from '@/api'
 import { VENDOR_STATUS_OPTIONS, VENDOR_TYPE_OPTIONS, vendorStatusMeta, vendorTypeLabel } from '@/utils/dict'
 import { formatDate } from '@/utils/format'
 import type { PageResult, Vendor } from '@/types'
 import VendorFormModal from './VendorFormModal.vue'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
 const message = useMessage()
 
@@ -108,12 +109,14 @@ const columns = computed<DataTableColumns<Vendor>>(() => [
   },
   { title: '创建时间', key: 'created_at', width: 160, render: (r) => formatDate(r.created_at) || '—' },
   {
-    title: '操作', key: 'actions', width: 120, fixed: 'right',
-    render: (r) => h('div', [
-      h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
-      h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, {
-        default: () => '删除后列表不再显示该供应商，已有的采购和往来记录不受影响。确认删除？',
-        trigger: () => h(NButton, { size: 'small', text: true, type: 'error', style: 'margin-left:8px' }, { default: () => '删除' }),
+    title: '操作', key: 'actions', width: 90, fixed: 'right',
+    render: (r) => actionBar([
+      actionIcon({ icon: 'edit', label: '编辑', onClick: () => openEdit(r) }),
+      actionIcon({
+        icon: 'delete',
+        label: '删除',
+        confirm: '删除后列表不再显示该供应商，已有的采购和往来记录不受影响。确认删除？',
+        onClick: () => onDelete(r),
       }),
     ]),
   },

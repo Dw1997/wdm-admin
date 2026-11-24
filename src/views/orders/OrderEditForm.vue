@@ -11,7 +11,7 @@
         <label>出车趟次<n-input :value="order.route_trip_id ? `#${order.route_trip_id}` : '待排车'" readonly /></label>
       </div>
       <div v-if="order.delivery_mode === 'freight'" class="dispatch-grid">
-        <label>零担批次<n-input :value="order.freight_shipment_id ? `#${order.freight_shipment_id}` : '待安排'" readonly /></label>
+        <label>物流批次<n-input :value="order.freight_shipment_id ? `#${order.freight_shipment_id}` : '待安排'" readonly /></label>
         <template v-if="canEditFreight">
           <label>运费承担<n-select v-model:value="freightMode" :options="freightOptions" /></label>
           <label>预计运费<n-input v-model:value="freightCost" :disabled="freightMode === 'customer_paid'" placeholder="留空按 0 元" /></label>
@@ -20,12 +20,20 @@
       <label class="remark">备注<n-input v-model:value="remark" placeholder="可填写送货或收货说明" /></label>
     </n-card>
     <n-card title="商品明细" size="small">
-      <p class="hint">规格可重新选择；切换后按新 SKU 报价。成本价仅展示，保存时由服务端写入最终快照。</p>
+      <p class="hint">
+        规格可重新选择；切换后按新 SKU 报价。成本价仅展示，保存时由服务端写入最终快照。
+        <template v-if="order.status === 'delivered'">
+          当前为已送达订单，修改数量或售价后保存将同步按差额调整库存与客户往来账。
+        </template>
+      </p>
       <div class="table-wrap"><table><thead><tr><th>商品</th><th>规格</th><th>数量</th><th>售价</th><th>成本价</th><th>本次拿货供应商</th><th>金额</th><th>SKU 利润</th><th>操作</th></tr></thead>
         <tbody><tr v-for="(row, index) in rows" :key="row.key">
           <td><span v-if="row.existing">{{ row.name }}</span><n-select v-else v-model:value="row.spuId" :options="productOptions" filterable remote placeholder="名称 / 拼音 / 条码" @search="searchProducts" @update:value="() => chooseProduct(row)" /></td>
-          <td><n-select v-model:value="row.skuId" :options="row.skus.map(s => ({ label: skuLabel(s), value: s.id }))" :disabled="!row.spuId || row.purchaseConfirmed" placeholder="选择规格" @update:value="() => quoteNew(row)" /></td>
-          <td><n-input v-model:value="row.quantity" :disabled="!row.skuId || row.purchaseConfirmed" placeholder="数量" @blur="quoteNew(row)" /></td>
+          <td><n-select v-model:value="row.skuId" :options="row.skus.map(s => ({ label: skuLabel(s), value: s.id }))" :disabled="!row.spuId || row.purchaseConfirmed || row.returnedQty > 0" placeholder="选择规格" @update:value="() => quoteNew(row)" /></td>
+          <td>
+            <n-input v-model:value="row.quantity" :disabled="!row.skuId || row.purchaseConfirmed" placeholder="数量" @blur="quoteNew(row)" />
+            <small v-if="row.returnedQty > 0" class="hint">已退 {{ row.returnedQty }}</small>
+          </td>
           <td class="price-cell">
             <n-input v-model:value="row.price" placeholder="售价" :disabled="!row.skuId || !canOverridePrice" @update:value="row.manualConfirmed = false" @blur="confirmPrice(row)" />
             <div class="price-meta">
@@ -38,13 +46,14 @@
           <td><n-select v-model:value="row.supplierId" :options="supplierOptions" :disabled="!row.skuId || row.purchaseConfirmed" filterable /></td>
           <td>¥{{ lineAmount(row) }}</td>
           <td class="profit">¥{{ lineProfit(row) }}</td>
-          <td><n-button text type="error" :disabled="row.purchaseConfirmed" @click="rows.splice(index, 1)">删除</n-button></td>
+          <td><n-button text type="error" :disabled="row.purchaseConfirmed || row.returnedQty > 0" @click="rows.splice(index, 1)">删除</n-button></td>
         </tr></tbody></table></div>
       <n-button dashed class="add-button" @click="addRow">添加商品</n-button>
     </n-card>
     <div class="action-bar">
       <div class="totals">
         <span>原订单货款 ¥{{ Number(order.total_amount).toFixed(2) }}</span>
+        <span>编辑后货款 ¥{{ draftTotal }}</span>
         <span v-if="order.profit != null">原订单利润 ¥{{ Number(order.profit).toFixed(2) }}</span>
         <span class="hint">修改后以服务端保存结果为准</span>
       </div>
@@ -68,15 +77,17 @@ const message = useMessage()
 const auth = useAuthStore()
 const canOverridePrice = computed(() => auth.user?.role === 'admin' || auth.user?.permissions?.includes('order.price_override') || auth.user?.permissions?.includes('*'))
 const sourceLabel = computed(() => ({ route_call: '线路询单', phone_in: '客户来电', miniprogram: '小程序', counter: '门店零售' })[props.order.source])
-const deliveryLabel = computed(() => ({ route: '开车自送', freight: '发物流', local: '自送', pickup: '现场提货' })[props.order.delivery_mode])
-type Row = { key: number; existing: boolean; skuId: number | null; spuId: number | null; skus: ProductSKU[]; name: string; spec: string; quantity: string; price: string; originalPrice: string; costPrice: string; manualConfirmed: boolean; supplierId: number; purchaseConfirmed: boolean }
+const deliveryLabel = computed(() => ({ route: '开车自送', freight: '发物流', local: '城区自送', pickup: '现场提货' })[props.order.delivery_mode])
+type Row = { key: number; existing: boolean; skuId: number | null; spuId: number | null; skus: ProductSKU[]; name: string; spec: string; quantity: string; price: string; originalPrice: string; costPrice: string; manualConfirmed: boolean; supplierId: number; purchaseConfirmed: boolean; returnedQty: number }
 let nextKey = 0
 const rows = ref<Row[]>(props.order.items.map(item => ({
   key: ++nextKey, existing: true, skuId: item.sku_id, spuId: null, skus: [],
-  name: item.spu_name, spec: item.sku_spec, quantity: String(item.quantity),
+  name: item.spu_name, spec: item.sku_spec, quantity: String(item.delivered_quantity ?? item.quantity),
   price: String(item.unit_price), originalPrice: String(item.unit_price), costPrice: String(item.cost_price || 0), manualConfirmed: false,
   supplierId: item.supplier_id || 0, purchaseConfirmed: item.cost_status === 'actual',
+  returnedQty: Number(item.returned_quantity || 0),
 })))
+const draftTotal = computed(() => rows.value.reduce((sum, r) => sum + (Number(r.quantity) || 0) * (Number(r.price) || 0), 0).toFixed(2))
 const remark = ref(props.order.remark || '')
 const freightMode = ref<'deduct' | 'store_paid' | 'customer_paid'>(
   props.order.freight_mode === 'store_paid' || props.order.freight_mode === 'customer_paid'
@@ -95,7 +106,7 @@ const supplierOptions = computed(() => [{ label: '自己进货', value: 0 }, ...
 const productOptions = computed(() => products.value.map(p => ({ label: p.name, value: p.id })))
 const saving = ref(false)
 function addRow() {
-  rows.value.push({ key: ++nextKey, existing: false, skuId: null, spuId: null, skus: [], name: '', spec: '', quantity: '1', price: '', originalPrice: '', costPrice: '', manualConfirmed: false, supplierId: 0, purchaseConfirmed: false })
+  rows.value.push({ key: ++nextKey, existing: false, skuId: null, spuId: null, skus: [], name: '', spec: '', quantity: '1', price: '', originalPrice: '', costPrice: '', manualConfirmed: false, supplierId: 0, purchaseConfirmed: false, returnedQty: 0 })
 }
 let searchToken = 0
 async function searchProducts(keyword: string) {
@@ -153,6 +164,9 @@ async function save() {
   if (!rows.value.length) { message.warning('订单至少保留一行商品；如需清空请取消订单'); return }
   if (rows.value.some(row => !row.skuId || !/^(?:\d+)(?:\.\d)?$/.test(row.quantity) || Number(row.quantity) <= 0)) {
     message.warning('请选好商品并填写有效数量'); return
+  }
+  if (rows.value.some(row => row.returnedQty > 0 && Number(row.quantity) < row.returnedQty)) {
+    message.warning('商品数量不能小于已退货数量'); return
   }
   if (rows.value.some(row => !/^(?:\d+)(?:\.\d{1,2})?$/.test(row.price))) {
     message.warning('请填写有效售价'); return

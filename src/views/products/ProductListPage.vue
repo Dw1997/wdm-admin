@@ -50,10 +50,11 @@
 <script setup lang="ts">
 import { h, ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { NButton, NDataTable, NTag, NPopconfirm, useMessage, type DataTableColumns } from 'naive-ui'
+import { NDataTable, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { productApi, categoryApi } from '@/api'
 import { formatDate } from '@/utils/format'
 import type { ProductSPU, ProductSKU, Category } from '@/types'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
 const router = useRouter()
 const message = useMessage()
@@ -130,13 +131,10 @@ const columns = computed<DataTableColumns<ProductSPU>>(() => [
   { title: 'SKU默认价格', key: 'sku_price', width: 110, render: (r) => { const s = (skuBySpu.value[r.id] || [])[0]; return s ? `¥${skuDefaultPrice(s).toFixed(2)}` : '—' } },
   { title: '上架小程序', key: 'is_miniprogram', width: 150, render: (r) => shelfCell(r) },
   { title: '创建时间', key: 'created_at', width: 150, render: (r) => formatDate(r.created_at) },
-  { title: '操作', key: 'actions', width: 120, render: (r) => h('div', { onClick: (e: Event) => e.stopPropagation() }, [
-    h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openEdit(r) }, { default: () => '编辑' }),
-    h(NPopconfirm, { onPositiveClick: () => onDelete(r) }, {
-      default: () => '确认删除?',
-      trigger: () => h(NButton, { size: 'small', text: true, type: 'error', style: 'margin-left:8px' }, { default: () => '删除' }),
-    }),
-  ]) },
+  { title: '操作', key: 'actions', width: 90, render: (r) => actionBar([
+    actionIcon({ icon: 'edit', label: '编辑', onClick: () => openEdit(r) }),
+    actionIcon({ icon: 'delete', label: '删除', confirm: '确认删除?', onClick: () => onDelete(r) }),
+  ], { stopPropagation: true }) },
 ])
 
 // SKU 明细子表：规格 / 状态 / 定价规则与默认售价（默认售价 = 成本价按规则实时预览）

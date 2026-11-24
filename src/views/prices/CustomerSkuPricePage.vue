@@ -92,13 +92,14 @@
 <script setup lang="ts">
 import { h, ref, computed, onMounted } from 'vue'
 import {
-  NButton, NInputNumber, NSelect, NDataTable, useMessage, useDialog,
+  NInputNumber, NSelect, NDataTable, useMessage, useDialog,
   type DataTableColumns,
 } from 'naive-ui'
 import { adminCustomerApi, customerSkuPriceApi, productApi, fetchAllPages, PAGE_SIZE } from '@/api'
 import { formatDate, calcSuggestedPrice } from '@/utils/format'
 import { PRICE_SOURCE } from '@/utils/dict'
 import type { AdminCustomer, CustomerSkuPrice, CustomerSkuPricePreview, ProductSKU } from '@/types'
+import { actionBar, actionIcon } from '@/components/tableActions'
 
 const message = useMessage()
 const dialog = useDialog()
@@ -174,12 +175,13 @@ const columns = computed<DataTableColumns<CustomerSkuPrice>>(() => [
   { title: '更新人', key: 'updated_by_name', width: 100, render: (r) => r.updated_by_name || '—' },
   { title: '更新时间', key: 'updated_at', width: 160, render: (r) => (r.updated_at ? formatDate(r.updated_at) : '—') },
   {
-    title: '操作', key: 'actions', width: 150,
-    render: (r) => h('div', { style: 'display:flex;gap:8px' }, [
-      h(NButton, { size: 'small', text: true, type: 'primary', loading: saving.value, onClick: () => saveRow(r) }, { default: () => '保存' }),
-      h(NButton, { size: 'small', text: true, onClick: () => previewRow(r) }, { default: () => '预览' }),
-      h(NButton, {
-        size: 'small', text: true, type: 'error',
+    title: '操作', key: 'actions', width: 105,
+    render: (r) => actionBar([
+      actionIcon({ icon: 'save', label: '保存', loading: saving.value, onClick: () => saveRow(r) }),
+      actionIcon({ icon: 'view', label: '预览', type: 'default', onClick: () => previewRow(r) }),
+      actionIcon({
+        icon: 'delete',
+        label: '删除',
         onClick: () => dialog.warning({
           title: '删除专属价',
           content: `确定删除「${r.customer_name}」对「${specsText(r)}」的专属价？删除后按等级价格/建议零售价成交。`,
@@ -187,7 +189,7 @@ const columns = computed<DataTableColumns<CustomerSkuPrice>>(() => [
           negativeText: '取消',
           onPositiveClick: () => removeRow(r),
         }),
-      }, { default: () => '删除' }),
+      }),
     ]),
   },
 ])

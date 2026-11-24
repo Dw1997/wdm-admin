@@ -1,150 +1,232 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
-      <h2 class="page-title">{{ isEdit ? '编辑商品' : '新建商品' }}</h2>
+  <div class="page-container product-create-page">
+    <div class="page-header sticky-header">
+      <div class="header-left">
+        <h2 class="page-title">{{ isEdit ? '编辑商品' : '新建商品' }}</h2>
+        <span v-if="form.code" class="header-sub">{{ form.code }}</span>
+      </div>
       <div class="header-actions">
-        <n-button @click="router.push('/spus/list')">取消</n-button>
-        <n-button type="primary" :loading="saving" @click="onSave">保存</n-button>
+        <n-button size="small" @click="router.push('/spus/list')">取消</n-button>
+        <n-button size="small" type="primary" :loading="saving" @click="onSave">保存商品</n-button>
       </div>
     </div>
 
-    <div class="create-grid">
-      <div class="form-col">
-        <div class="card-section">
+    <div class="create-stack">
+      <!-- 1. 基础信息：12 栏高密度栅格，2 行收口 -->
+      <section class="card-section compact-card">
+        <div class="section-head">
           <h3 class="section-title">基础信息</h3>
-          <n-form label-placement="left" label-width="96">
-            <n-form-item label="SPU ID"><n-input v-model:value="form.code" placeholder="自定义编号，便于记忆与检索" /></n-form-item>
-            <n-form-item label="商品名称"><n-input v-model:value="form.name" placeholder="请输入商品标题" /></n-form-item>
-            <n-form-item label="商品分类">
-              <!-- 单选 n-cascader 的 value 是叶子分类 id（非路径数组），直接绑定 form.category_id -->
-              <n-cascader
-                v-model:value="form.category_id"
-                :options="cascaderOptions"
-                placeholder="选择商品分类"
-                clearable
-                show-path
-                style="width: 100%"
-              />
-            </n-form-item>
-            <n-form-item label="供应商">
-              <!-- 供应商选项来自 GET /vendors（Apifox 505911554） -->
-              <n-select v-model:value="form.supplier_id" :options="supplierOptions" placeholder="不选则默认自营（0）" clearable />
-            </n-form-item>
-            <n-form-item label="基础单位">
-              <!-- 库存按基础单位计数；称重商品填"斤"，瓶装填"瓶"（04 §2.2） -->
-              <n-auto-complete v-model:value="form.base_unit" :options="baseUnitOptions" placeholder="如 斤 / 个 / 瓶 / 包 / 件" />
-            </n-form-item>
-            <n-form-item label="上架小程序">
-              <n-switch v-model:value="form.is_miniprogram" />
-            </n-form-item>
-          </n-form>
+          <span class="section-tip">分类需选最末级；临时拿货商品需指定默认供应商</span>
+        </div>
+        <div class="base-grid">
+          <div class="field-item span-5">
+            <label class="field-label required">商品名称</label>
+            <n-input v-model:value="form.name" size="small" placeholder="请输入商品标题，如 大红八角（箱装）" />
+          </div>
+          <div class="field-item span-3">
+            <label class="field-label">SPU ID</label>
+            <n-input v-model:value="form.code" size="small" placeholder="自定义编号，便于检索" />
+          </div>
+          <div class="field-item span-4">
+            <label class="field-label">商品分类</label>
+            <!-- 单选 n-cascader 的 value 是叶子分类 id（非路径数组），直接绑定 form.category_id -->
+            <n-cascader
+              v-model:value="form.category_id"
+              :options="cascaderOptions"
+              size="small"
+              placeholder="选择最末级分类"
+              clearable
+              show-path
+              style="width: 100%"
+            />
+          </div>
+
+          <div class="field-item span-4">
+            <label class="field-label">默认货源</label>
+            <n-radio-group v-model:value="form.supply_mode" size="small" class="supply-radio-group">
+              <n-radio-button value="self">店家自己（记库存）</n-radio-button>
+              <n-radio-button value="temp_pick">临时拿货（记应付）</n-radio-button>
+            </n-radio-group>
+          </div>
+          <div class="field-item span-4">
+            <label class="field-label" :class="{ required: form.supply_mode === 'temp_pick' }">默认供应商</label>
+            <n-select
+              v-model:value="form.supplier_id"
+              :options="supplierOptions"
+              size="small"
+              filterable
+              :placeholder="form.supply_mode === 'temp_pick' ? '请选择同市场拿货供应商（必填）' : '不选则默认自营（0）'"
+              clearable
+            />
+          </div>
+          <div class="field-item span-2">
+            <label class="field-label required">基础单位</label>
+            <!-- 库存按基础单位计数；称重商品填"斤"，瓶装填"瓶"（04 §2.2） -->
+            <n-auto-complete
+              v-model:value="form.base_unit"
+              :options="baseUnitOptions"
+              size="small"
+              placeholder="斤 / 个 / 瓶"
+            />
+          </div>
+          <div class="field-item span-2">
+            <label class="field-label">上架小程序</label>
+            <div class="switch-inline">
+              <n-switch v-model:value="form.is_miniprogram" size="small" />
+              <span class="switch-text" :class="{ active: form.is_miniprogram }">
+                {{ form.is_miniprogram ? '已上架' : '未上架' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. 规格与定价：商品属性 + SKU 紧凑表格一体 -->
+      <section class="card-section compact-card">
+        <div class="section-head">
+          <div class="section-head-left">
+            <h3 class="section-title">规格与定价</h3>
+            <n-tag size="small" :bordered="false" type="info">{{ skuList.length }} 个 SKU</n-tag>
+          </div>
+          <span class="section-tip">输入属性值按回车继续添加，自动按笛卡尔积生成 SKU；预估价仅供参考，保存后以服务端为准</span>
         </div>
 
-        <div class="card-section">
-          <h3 class="section-title">商品属性</h3>
-          <n-alert type="info" :bordered="false" style="margin-bottom: 12px">属性值按笛卡尔积自动生成 SKU，例如 规格[1斤,2斤] 会生成对应 SKU。</n-alert>
+        <div class="attr-box">
           <div v-for="(attr, i) in form.sku_attributes" :key="i" class="attr-row">
             <n-input
               v-model:value="attr.name"
+              size="small"
               placeholder="属性名，如 规格"
-              style="width: 150px"
+              class="attr-name-input"
               @keyup.enter="focusValue(i as number, 0)"
             />
+            <span class="attr-colon">:</span>
             <div class="attr-values">
               <div v-for="(v, vi) in attr.values" :key="vi" class="attr-value-item">
                 <n-input
                   :ref="(el: any) => setValueRef(i as number, vi as number, el)"
                   v-model:value="attr.values[vi]"
+                  size="small"
                   placeholder="属性值，如 1斤"
-                  style="width: 140px"
+                  class="attr-val-input"
                   @keyup.enter="focusValue(i as number, (vi as number) + 1)"
                 />
                 <!-- 末尾空白值是待输入框，不显示删除 -->
-                <n-button v-if="(v || '').trim()" text type="error" @click="removeValue(i as number, vi as number)">×</n-button>
+                <button
+                  v-if="(v || '').trim()"
+                  type="button"
+                  class="attr-val-del"
+                  title="删除属性值"
+                  @click="removeValue(i as number, vi as number)"
+                >×</button>
               </div>
             </div>
             <!-- 末尾空白属性行是待输入行，不显示移除 -->
             <n-button
               v-if="attr.name?.trim() || (attr.values || []).some((v: string) => v.trim()) || i !== form.sku_attributes.length - 1"
-              text type="error" @click="removeAttribute(i as number)"
+              text
+              size="small"
+              type="error"
+              @click="removeAttribute(i as number)"
             >移除</n-button>
           </div>
         </div>
 
-        <div class="card-section">
-          <h3 class="section-title">SKU 编辑（{{ skuList.length }}）</h3>
-          <div v-if="skuList.length" class="sku-editor">
-            <div v-for="sku in skuList" :key="JSON.stringify(sku.specs)" class="sku-card">
-              <div class="sku-row sku-single-row">
-                <div class="sku-field sku-specs">
-                  <span class="sku-label">规格</span>
-                  <div class="spec-tags">
-                    <n-tag v-for="(value, key) in sku.specs" :key="key" size="small" :bordered="false">{{ key }}：{{ value }}</n-tag>
-                  </div>
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">是否启用</span>
-                  <n-select :value="sku.is_enabled ? 1 : 0" :options="enabledOpts" size="small" @update:value="sku.is_enabled = $event === 1" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">上架小程序</span>
-                  <n-switch v-model:value="sku.is_miniprogram" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">换算数量</span>
-                  <n-input-number v-model:value="sku.base_qty" :precision="1" :min="0.1" :show-button="false" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">允许小数</span>
-                  <n-switch v-model:value="sku.allow_decimal" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">条码</span>
-                  <n-input :value="sku.barcode ?? ''" maxlength="50" placeholder="扫码枪录入" size="small" @update:value="sku.barcode = $event.trim() || null" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">成本价</span>
-                  <n-input-number v-model:value="sku.cost_price" :precision="2" :min="0" :show-button="false" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">折合每{{ form.base_unit || '基础单位' }}成本</span>
-                  <strong :class="{ 'cost-warning': costMismatch }">¥{{ costPerBase(sku).toFixed(2) }}</strong>
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">默认价格方式</span>
-                  <n-select v-model:value="sku.price_method" :options="priceMethodOpts" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">默认价格数值</span>
-                  <n-input-number v-model:value="sku.price_value" :precision="2" :show-button="false" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">默认售价（预估）</span>
-                  <strong class="suggested-price">¥{{ calcDefaultPrice(sku).toFixed(2) }}</strong>
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">最低售价规则</span>
-                  <n-select v-model:value="sku.min_price_method" :options="priceMethodOpts" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">最低售价数值</span>
-                  <n-input-number v-model:value="sku.min_price_value" :precision="2" :show-button="false" size="small" />
-                </div>
-                <div class="sku-field">
-                  <span class="sku-label">最低售价（预估）</span>
-                  <strong>¥{{ calcMinPrice(sku).toFixed(2) }}</strong>
-                </div>
+        <div v-if="skuList.length" class="sku-table">
+          <div class="sku-thead">
+            <span>规格</span>
+            <span>换算 / 小数</span>
+            <span>成本价</span>
+            <span>建议售价规则</span>
+            <span>最低售价规则</span>
+            <span>条码</span>
+            <span>状态</span>
+          </div>
+          <div v-for="sku in skuList" :key="JSON.stringify(sku.specs)" class="sku-tr">
+            <div class="sku-cell cell-specs">
+              <div class="spec-tags">
+                <n-tag v-for="(value, key) in sku.specs" :key="key" size="small" :bordered="false">
+                  {{ key }}：{{ value }}
+                </n-tag>
               </div>
             </div>
-          </div>
-          <n-empty v-else description="请先填写商品属性" size="small" />
-          <n-alert v-if="costMismatch" type="warning" :bordered="false" style="margin-top: 8px">各规格折合每基础单位的成本相差超过 30%，请确认换算数量没有填错（不阻止保存）。</n-alert>
-        </div>
-      </div>
 
-      <div class="media-col">
-        <div class="card-section">
-          <h3 class="section-title">主图上传（{{ form.main_images.length }}/5）</h3>
+            <div class="sku-cell">
+              <div class="unit-input-wrap">
+                <n-input-number v-model:value="sku.base_qty" :precision="1" :min="0.1" :show-button="false" size="small" />
+                <span class="unit-suffix">{{ form.base_unit || '基础' }}</span>
+              </div>
+              <label class="cell-sub-toggle">
+                <n-switch v-model:value="sku.allow_decimal" size="small" />
+                <span>允许小数</span>
+              </label>
+            </div>
+
+            <div class="sku-cell">
+              <n-input-number v-model:value="sku.cost_price" :precision="2" :min="0" :show-button="false" size="small" placeholder="成本价">
+                <template #prefix>¥</template>
+              </n-input-number>
+              <div class="cell-sub-metric" :class="{ 'cost-warning': costMismatch }">
+                折合 ¥{{ costPerBase(sku).toFixed(2) }}/{{ form.base_unit || '单位' }}
+              </div>
+            </div>
+
+            <div class="sku-cell">
+              <div class="price-combo">
+                <n-select v-model:value="sku.price_method" :options="priceMethodOpts" size="small" class="method-select" />
+                <n-input-number v-model:value="sku.price_value" :precision="2" :show-button="false" size="small" class="val-input" />
+              </div>
+              <div class="cell-sub-metric suggested-price">
+                预估 ¥{{ calcDefaultPrice(sku).toFixed(2) }}
+              </div>
+            </div>
+
+            <div class="sku-cell">
+              <div class="price-combo">
+                <n-select v-model:value="sku.min_price_method" :options="priceMethodOpts" size="small" class="method-select" />
+                <n-input-number v-model:value="sku.min_price_value" :precision="2" :show-button="false" size="small" class="val-input" />
+              </div>
+              <div class="cell-sub-metric">
+                最低 ¥{{ calcMinPrice(sku).toFixed(2) }}
+              </div>
+            </div>
+
+            <div class="sku-cell">
+              <n-input
+                :value="sku.barcode ?? ''"
+                maxlength="50"
+                placeholder="扫码枪录入"
+                size="small"
+                @update:value="sku.barcode = $event.trim() || null"
+              />
+            </div>
+
+            <div class="sku-cell cell-status">
+              <label class="cell-sub-toggle">
+                <n-switch v-model:value="sku.is_enabled" size="small" />
+                <span>{{ sku.is_enabled ? '启用' : '停用' }}</span>
+              </label>
+              <label class="cell-sub-toggle">
+                <n-switch v-model:value="sku.is_miniprogram" size="small" />
+                <span>小程序</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div v-else class="sku-empty-bar">在上方输入商品属性名与属性值后，这里将自动生成 SKU 行</div>
+
+        <n-alert v-if="costMismatch" type="warning" :bordered="false" class="cost-alert">
+          各规格折合每基础单位的成本相差超过 30%，请确认换算数量没有填错（不阻止保存）。
+        </n-alert>
+      </section>
+
+      <!-- 3. 商品图片：左右并排双栏 -->
+      <section class="media-grid">
+        <div class="card-section compact-card">
+          <div class="section-head">
+            <h3 class="section-title">主图上传（{{ form.main_images.length }}/5）</h3>
+            <span class="section-tip">拖动排序，首张为封面</span>
+          </div>
           <div class="img-grid">
             <div
               v-for="(url, i) in (form.main_images as string[])"
@@ -168,13 +250,21 @@
               accept="image/*"
               :custom-request="uploadMain"
             >
-              <div class="img-add"><span class="plus">＋</span><span>多选上传</span></div>
+              <div class="img-add"><span class="plus">＋</span><span>上传主图</span></div>
             </n-upload>
           </div>
-          <div class="img-hint">支持一次多选上传，拖动图片可调整顺序，第一张为封面</div>
         </div>
-        <div class="card-section">
-          <h3 class="section-title">详情图上传（{{ form.detail_images.length }}/10）</h3>
+
+        <div class="card-section compact-card">
+          <div class="section-head">
+            <h3 class="section-title">详情图上传（{{ form.detail_images.length }}/10）</h3>
+            <div class="section-head-right">
+              <span class="section-tip">拖动调整拼接顺序</span>
+              <n-button v-if="form.detail_images.length" text size="small" type="primary" @click="showDetailPreview = true">
+                预览长图
+              </n-button>
+            </div>
+          </div>
           <div class="img-grid">
             <div
               v-for="(url, i) in (form.detail_images as string[])"
@@ -197,17 +287,18 @@
               accept="image/*"
               :custom-request="uploadDetail"
             >
-              <div class="img-add"><span class="plus">＋</span><span>多选上传</span></div>
+              <div class="img-add"><span class="plus">＋</span><span>上传详情图</span></div>
             </n-upload>
           </div>
-          <div class="img-hint">支持一次多选上传，拖动图片可调整长图拼接顺序</div>
-          <div v-if="form.detail_images.length" class="long-image-preview">
-            <img v-for="url in form.detail_images" :key="url" :src="url" alt="详情图" />
-          </div>
-          <div v-else class="long-image-empty">上传详情图后按顺序上下拼接，可上下滑动预览长图</div>
         </div>
-      </div>
+      </section>
     </div>
+
+    <n-modal v-model:show="showDetailPreview" preset="card" title="详情长图预览" style="width: 460px; max-width: 92vw">
+      <div class="long-image-preview">
+        <img v-for="url in form.detail_images" :key="url" :src="url" alt="详情图" />
+      </div>
+    </n-modal>
   </div>
 </template>
 
@@ -240,6 +331,7 @@ const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const saving = ref(false)
+const showDetailPreview = ref(false)
 const categoryTree = ref<Category[]>([])
 const skuList = ref<SkuRow[]>([])
 // 供应商下拉选项：GET /vendors（Apifox 505911554）
@@ -259,6 +351,7 @@ const form = reactive<any>({
   status: 1,
   is_miniprogram: false,
   base_unit: '斤',
+  supply_mode: 'self' as 'self' | 'temp_pick',
   supplier_id: null as number | null,
   main_images: [] as string[],
   detail_images: [] as string[],
@@ -268,11 +361,6 @@ const form = reactive<any>({
 const priceMethodOpts = [
   { label: '百分比', value: 'percent' },
   { label: '固定金额', value: 'amount' },
-]
-
-const enabledOpts = [
-  { label: '启用', value: 1 },
-  { label: '停用', value: 0 },
 ]
 
 function mapCats(nodes: Category[]): any[] {
@@ -534,6 +622,10 @@ async function onSave() {
   if (form.is_miniprogram && !skuList.value.some((s) => s.is_enabled && s.is_miniprogram)) {
     message.warning('商品已上架，但没有上架的规格，小程序不会展示')
   }
+  if (form.supply_mode === 'temp_pick' && !form.supplier_id) {
+    message.warning('默认货源为「临时拿货」时，必须设置默认供应商')
+    return
+  }
   const basicPayload = {
     name: form.name,
     category_id: form.category_id || null,
@@ -544,6 +636,7 @@ async function onSave() {
     detail_images: form.detail_images,
     sku_attributes: validAttrs(),
     status: form.status ?? 1,
+    supply_mode: form.supply_mode,
     // 未选供应商时提交 0（后端语义：0=自己/自营）
     supplier_id: form.supplier_id || 0,
     is_miniprogram: !!form.is_miniprogram,
@@ -595,6 +688,7 @@ onMounted(async () => {
     Object.assign(form, JSON.parse(JSON.stringify(spu)))
     form.is_miniprogram = !!spu.is_miniprogram
     form.status = spu.status ?? 1
+    form.supply_mode = spu.supply_mode || 'self'
     form.supplier_id = spu.supplier_id || null
     form.base_unit = spu.base_unit || '斤'
     form.sku_attributes = (spu.sku_attributes || []).map((a) => ({ name: a.name, values: [...a.values] }))
@@ -623,42 +717,176 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+.product-create-page { display: flex; flex-direction: column; gap: 12px; }
+.sticky-header {
+  position: sticky; top: 0; z-index: 10;
+  margin-bottom: 0; padding: 10px 16px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
+}
+.header-left { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.header-sub { font-size: 12px; color: var(--text-3); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .header-actions { display: flex; align-items: center; gap: 8px; }
-.create-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-.form-col, .media-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.section-title { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
-.attr-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.attr-values { flex: 1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
-.attr-value-item { display: flex; align-items: center; gap: 2px; }
-.sku-editor { display: flex; flex-direction: column; gap: 12px; }
-.sku-card { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); }
-.sku-row { display: grid; gap: 10px; align-items: end; }
-.sku-single-row { grid-template-columns: minmax(160px, 1.6fr) repeat(13, minmax(0, 1fr)); }
-.sku-field { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
-.sku-label { overflow: hidden; color: var(--text-3); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
-.spec-tags { display: flex; min-height: 28px; flex-wrap: wrap; align-items: center; gap: 4px; }
-.sku-field strong { display: flex; min-height: 28px; align-items: center; font-size: 13px; }
-.cost-warning { color: #d97706; }
-.suggested-price { color: #ea580c; }
-.long-image-preview { margin-top: 16px; max-height: 560px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); }
-.long-image-preview img { display: block; width: 100%; }
-.long-image-empty { margin-top: 16px; padding: 24px; text-align: center; font-size: 13px; color: var(--text-3); border: 1px dashed var(--border); border-radius: 8px; }
-/* 图片网格：可拖动排序 */
+
+.create-stack { display: flex; flex-direction: column; gap: 12px; }
+.compact-card { padding: 14px 16px; margin-bottom: 0; }
+
+.section-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+}
+.section-head-left, .section-head-right { display: flex; align-items: center; gap: 8px; }
+.section-title { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-1); }
+.section-tip { font-size: 12px; color: var(--text-3); }
+
+/* 1. 基础信息：12 栏高密度栅格 */
+.base-grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-items: end;
+}
+.field-item { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.span-2 { grid-column: span 2; }
+.span-3 { grid-column: span 3; }
+.span-4 { grid-column: span 4; }
+.span-5 { grid-column: span 5; }
+.field-label { font-size: 12px; font-weight: 500; color: var(--text-2); line-height: 18px; }
+.field-label.required::after { content: ' *'; color: #dc2626; }
+.supply-radio-group { display: flex; width: 100%; }
+.supply-radio-group :deep(.n-radio-button) { flex: 1; text-align: center; padding: 0 8px; }
+.switch-inline {
+  display: flex; align-items: center; gap: 8px;
+  height: 28px; padding: 0 10px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--bg-subtle);
+}
+.switch-text { font-size: 12px; color: var(--text-3); }
+.switch-text.active { color: var(--primary); font-weight: 500; }
+
+/* 2. 商品属性（紧凑行内框） */
+.attr-box {
+  padding: 10px 12px; margin-bottom: 12px;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.attr-row { display: flex; align-items: center; gap: 8px; }
+.attr-name-input { width: 128px; flex: none; }
+.attr-colon { color: var(--text-3); font-weight: 600; flex: none; }
+.attr-values { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+.attr-value-item { position: relative; display: flex; align-items: center; }
+.attr-val-input { width: 118px; }
+.attr-val-del {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--text-3); font-size: 13px; line-height: 1;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.attr-val-del:hover { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+
+/* SKU 紧凑表格（7 列，统一表头） */
+.sku-table {
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+.sku-thead, .sku-tr {
+  display: grid;
+  grid-template-columns:
+    minmax(110px, 1.15fr)
+    minmax(120px, 1fr)
+    minmax(125px, 1.05fr)
+    minmax(175px, 1.45fr)
+    minmax(175px, 1.45fr)
+    minmax(115px, 1fr)
+    minmax(92px, 0.8fr);
+  gap: 10px;
+  align-items: start;
+  padding: 8px 12px;
+}
+.sku-thead {
+  background: var(--bg-subtle); border-bottom: 1px solid var(--border);
+  font-size: 12px; font-weight: 600; color: var(--text-2);
+}
+.sku-tr { border-top: 1px solid var(--border); background: var(--bg-card); }
+.sku-tr:first-of-type { border-top: 0; }
+.sku-tr:hover { background: var(--bg-subtle); }
+.sku-cell { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cell-specs { padding-top: 2px; }
+.spec-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.unit-input-wrap { display: flex; align-items: center; gap: 4px; }
+.unit-input-wrap :deep(.n-input-number) { flex: 1; min-width: 0; }
+.unit-suffix { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.price-combo { display: flex; gap: 4px; }
+.method-select { width: 88px; flex: none; }
+.val-input { flex: 1; min-width: 0; }
+.cell-sub-metric {
+  font-size: 11px; color: var(--text-3); line-height: 16px;
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cell-sub-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-2); cursor: pointer; user-select: none; line-height: 18px;
+}
+.cell-status { gap: 6px; padding-top: 2px; }
+.cost-warning { color: #d97706; font-weight: 600; }
+.suggested-price { color: #ea580c; font-weight: 600; }
+.sku-empty-bar {
+  padding: 18px 12px; text-align: center; font-size: 13px; color: var(--text-3);
+  border: 1px dashed var(--border); border-radius: 8px;
+}
+.cost-alert { margin-top: 10px; }
+
+/* 3. 商品图片：左右并排双栏 */
+.media-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr);
+  gap: 12px;
+  align-items: start;
+}
 .img-grid { display: flex; flex-wrap: wrap; gap: 8px; }
-.img-item { position: relative; width: 128px; height: 128px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; cursor: grab; user-select: none; }
+.img-item {
+  position: relative; width: 88px; height: 88px;
+  border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden; cursor: grab; user-select: none;
+}
 .img-item:active { cursor: grabbing; }
 .img-item.dragging { opacity: 0.45; }
 .img-item img { width: 100%; height: 100%; object-fit: cover; }
-.img-badge { position: absolute; left: 0; top: 0; background: var(--primary); color: #fff; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: 0 0 6px 0; }
-.img-remove { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%; background: rgba(0,0,0,0.55); color: #fff; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.img-badge {
+  position: absolute; left: 0; top: 0;
+  background: var(--primary); color: #fff;
+  font-size: 10px; line-height: 1; padding: 3px 5px; border-radius: 0 0 6px 0;
+}
+.img-remove {
+  position: absolute; top: 3px; right: 3px;
+  width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 13px; line-height: 1;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
 .img-remove:hover { background: rgba(220, 38, 38, 0.9); }
-.img-add { width: 128px; height: 128px; border: 1px dashed #d1d5db; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--text-3); font-size: 12px; cursor: pointer; }
-.img-add .plus { font-size: 26px; line-height: 1; }
+.img-add {
+  width: 88px; height: 88px;
+  border: 1px dashed var(--border); border-radius: 8px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; color: var(--text-3); font-size: 11px; cursor: pointer;
+}
+.img-add .plus { font-size: 22px; line-height: 1; }
 .img-add:hover { border-color: var(--primary); color: var(--primary); }
-.img-hint { margin-top: 8px; font-size: 12px; color: var(--text-3); }
-@media (max-width: 900px) {
-  .create-grid { grid-template-columns: 1fr; }
-  .sku-single-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .sku-specs { grid-column: 1 / -1; }
+.long-image-preview {
+  max-height: 68vh; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle);
+}
+.long-image-preview img { display: block; width: 100%; }
+
+@media (max-width: 1180px) {
+  .base-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .span-5, .span-4, .span-3 { grid-column: span 3; }
+  .span-2 { grid-column: span 2; }
+  .sku-thead { display: none; }
+  .sku-tr { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; }
+  .cell-specs { grid-column: 1 / -1; }
+  .media-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .base-grid { grid-template-columns: 1fr; }
+  .span-5, .span-4, .span-3, .span-2 { grid-column: span 1; }
+  .sku-tr { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 </style>

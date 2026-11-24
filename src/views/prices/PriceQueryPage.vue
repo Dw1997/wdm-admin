@@ -5,296 +5,291 @@
         <h2 class="page-title">价格查询</h2>
       </div>
       <div class="filter-bar">
-        <n-input v-model:value="bookKeyword" clearable placeholder="搜索价格簿名称" style="width: 220px" @keyup.enter="loadBooks" />
-        <n-button type="primary" size="small" @click="loadBooks">查询</n-button>
-        <n-button size="small" @click="openBookCreate">新建价格簿</n-button>
+        <n-select
+          v-model:value="customerId"
+          :options="customerOptions"
+          filterable
+          clearable
+          placeholder="选择客户（必选）"
+          style="width: 240px"
+          @update:value="onCustomerChange"
+        />
+        <n-select
+          v-model:value="spuId"
+          :options="spuOptions"
+          :loading="spuLoading"
+          filterable
+          remote
+          clearable
+          placeholder="选择商品（可选）"
+          style="width: 240px"
+          @search="searchSpus"
+          @update:value="onSpuChange"
+        />
+        <n-select
+          v-model:value="skuId"
+          :options="skuOptions"
+          :loading="skuLoading"
+          :disabled="!spuId"
+          clearable
+          placeholder="选择 SKU（可选）"
+          style="width: 200px"
+          @update:value="applyFilters"
+        />
+        <n-input
+          v-model:value="keyword"
+          clearable
+          placeholder="商品名称 / 编码 / 条码"
+          style="width: 220px"
+          @keyup.enter="applyFilters"
+        />
+        <n-button type="primary" size="small" :loading="loading" @click="applyFilters">查询</n-button>
+        <n-button size="small" @click="resetFilters">重置</n-button>
       </div>
+
+      <n-alert v-if="selectedCustomer" type="info" :bordered="false" style="margin-bottom: 12px">
+        {{ summaryText }}
+      </n-alert>
+
       <n-data-table
-        :columns="bookColumns"
-        :data="books"
+        :columns="columns"
+        :data="rows"
         :loading="loading"
-        size="small"
         :bordered="false"
-        :row-key="(r: PriceBook) => r.id"
-        :row-class-name="(r: PriceBook) => (r.id === currentBookId ? 'row-active' : '')"
-        :row-props="(r: PriceBook) => ({ style: 'cursor: pointer', onClick: () => selectBook(r.id) })"
-      />
-    </div>
+        size="small"
+        :row-key="(r: CustomerPriceRow) => r.sku_id"
+        :expanded-row-keys="expandedKeys"
+        :row-props="rowProps"
+        @update:expanded-row-keys="(k: Array<string | number>) => (expandedKeys = k as number[])"
+      >
+        <template #empty>
+          <div style="padding: 24px; color: var(--text-3)">
+            {{ customerId ? '没有符合条件的规格' : '请先选择客户' }}
+          </div>
+        </template>
+      </n-data-table>
 
-    <div class="card-section" v-if="currentBook">
-      <div class="page-header">
-        <h2 class="page-title">
-          {{ currentBook.name }}
-          <n-tag size="small" :type="PRICE_CHANNEL_TYPE[currentBook.channel_type].type" :bordered="false" style="margin-left: 8px">
-            {{ PRICE_CHANNEL_TYPE[currentBook.channel_type].label }}
-          </n-tag>
-        </h2>
-        <n-button type="primary" size="small" @click="openItemCreate">新增明细</n-button>
+      <div v-if="customerId && total > pageSize" class="pagination-bar">
+        <n-pagination v-model:page="page" :item-count="total" :page-size="pageSize" @update:page="load" />
       </div>
-      <n-data-table
-        :columns="itemColumns"
-        :data="bookItems"
-        :loading="itemsLoading"
-        size="small"
-        :bordered="false"
-        :row-key="(r: PriceBookItem) => r.id"
-      />
     </div>
-
-    <n-modal v-model:show="showBookModal" preset="card" :title="bookForm.id ? '编辑价格簿' : '新建价格簿'" style="width: 440px">
-      <n-form label-placement="left" label-width="90">
-        <n-form-item label="名称">
-          <n-input v-model:value="bookForm.name" maxlength="50" show-count placeholder="价格簿名称" />
-        </n-form-item>
-        <n-form-item label="销售渠道">
-          <n-select v-model:value="bookForm.channel_type" :options="channelOptions" placeholder="选择渠道" />
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 8px">
-          <n-button size="small" @click="showBookModal = false">取消</n-button>
-          <n-button type="primary" size="small" :loading="saving" @click="saveBook">保存</n-button>
-        </div>
-      </template>
-    </n-modal>
-
-    <n-modal v-model:show="showItemModal" preset="card" :title="itemForm.id ? '编辑明细' : '新增明细'" style="width: 460px">
-      <n-form label-placement="left" label-width="90">
-        <n-form-item label="商品">
-          <n-select v-model:value="itemForm.spu_id" :options="spuOptions" filterable :disabled="!!itemForm.id" placeholder="选择商品" />
-        </n-form-item>
-        <n-form-item label="价格 (元)">
-          <n-input-number v-model:value="itemForm.price" :precision="2" :min="0" style="width: 100%" />
-        </n-form-item>
-        <n-form-item label="生效日期">
-          <n-date-picker v-model:formatted-value="itemForm.effective_date" type="date" value-format="yyyy-MM-dd" style="width: 100%" />
-        </n-form-item>
-      </n-form>
-      <template #footer>
-        <div style="display: flex; justify-content: flex-end; gap: 8px">
-          <n-button size="small" @click="showItemModal = false">取消</n-button>
-          <n-button type="primary" size="small" :loading="saving" @click="saveItem">保存</n-button>
-        </div>
-      </template>
-    </n-modal>
   </div>
 </template>
 
 <script setup lang="ts">
 import { h, ref, computed, onMounted } from 'vue'
 import {
-  NButton, NInput, NInputNumber, NSelect, NDataTable, NTag, useMessage, useDialog,
+  NDataTable, NDescriptions, NDescriptionsItem, NTag,
   type DataTableColumns,
 } from 'naive-ui'
-import { priceBookApi, productApi, fetchAllPages, PAGE_SIZE } from '@/api'
-import { PRICE_CHANNEL_TYPE } from '@/utils/dict'
+import { priceApi, productApi, adminCustomerApi, fetchAllPages, PAGE_SIZE } from '@/api'
+import { PRICE_SOURCE } from '@/utils/dict'
 import { formatDate } from '@/utils/format'
-import type { PriceBook, PriceBookItem, PriceChannelType, ProductSPU } from '@/types'
+import type { AdminCustomer, CustomerPriceRow, ProductSKU } from '@/types'
 
-const message = useMessage()
-const dialog = useDialog()
+const customerId = ref<number | null>(null)
+const spuId = ref<number | null>(null)
+const skuId = ref<number | null>(null)
+const keyword = ref('')
+const page = ref(1)
+const pageSize = PAGE_SIZE
+
 const loading = ref(false)
-const itemsLoading = ref(false)
-const saving = ref(false)
+const spuLoading = ref(false)
+const skuLoading = ref(false)
 
-const books = ref<PriceBook[]>([])
-const allItems = ref<PriceBookItem[]>([])
-const spus = ref<ProductSPU[]>([])
-const bookKeyword = ref('')
-const currentBookId = ref<number | null>(null)
-
-const currentBook = computed(() => books.value.find((b) => b.id === currentBookId.value) || null)
-const bookItems = computed(() => allItems.value.filter((it) => it.book_id === currentBookId.value))
-
-const channelOptions = (Object.keys(PRICE_CHANNEL_TYPE) as PriceChannelType[]).map((k) => ({
-  label: PRICE_CHANNEL_TYPE[k].label,
-  value: k,
-}))
-
+const customers = ref<AdminCustomer[]>([])
+const customerOptions = ref<{ label: string; value: number }[]>([])
 const spuOptions = ref<{ label: string; value: number }[]>([])
+const skus = ref<ProductSKU[]>([])
 
-function spuName(spuId: number): string {
-  const spu = spus.value.find((s) => s.id === spuId)
-  return spu ? `${spu.name} (${spu.code})` : `SPU #${spuId}`
-}
+const rows = ref<CustomerPriceRow[]>([])
+const total = ref(0)
+const expandedKeys = ref<number[]>([])
 
-const bookColumns = computed<DataTableColumns<PriceBook>>(() => [
-  { title: '名称', key: 'name', minWidth: 160 },
-  {
-    title: '销售渠道', key: 'channel_type', width: 120,
-    render: (r) => h(NTag, { size: 'small', type: PRICE_CHANNEL_TYPE[r.channel_type].type, bordered: false }, { default: () => PRICE_CHANNEL_TYPE[r.channel_type].label }),
-  },
-  {
-    title: '明细数', key: 'items', width: 80,
-    render: (r) => allItems.value.filter((it) => it.book_id === r.id).length,
-  },
-  { title: '更新时间', key: 'updated_at', width: 160, render: (r) => (r.updated_at ? formatDate(r.updated_at) : '—') },
-  {
-    title: '操作', key: 'actions', width: 130,
-    render: (r) => h('div', { style: 'display:flex;gap:8px' }, [
-      h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openBookEdit(r) }, { default: () => '编辑' }),
-      h(NButton, {
-        size: 'small', text: true, type: 'error',
-        onClick: () => dialog.warning({
-          title: '删除价格簿',
-          content: `确定删除价格簿「${r.name}」及其全部明细？`,
-          positiveText: '删除',
-          negativeText: '取消',
-          onPositiveClick: () => removeBook(r),
-        }),
-      }, { default: () => '删除' }),
-    ]),
-  },
-])
+let searchTimer: ReturnType<typeof setTimeout> | undefined
 
-const itemColumns = computed<DataTableColumns<PriceBookItem>>(() => [
-  { title: '商品', key: 'spu', minWidth: 200, render: (r) => spuName(r.spu_id) },
-  { title: '价格 (元)', key: 'price', width: 120, render: (r) => `¥${r.price}` },
-  { title: '生效日期', key: 'effective_date', width: 120 },
-  { title: '更新时间', key: 'updated_at', width: 160, render: (r) => (r.updated_at ? formatDate(r.updated_at) : '—') },
-  {
-    title: '操作', key: 'actions', width: 130,
-    render: (r) => h('div', { style: 'display:flex;gap:8px' }, [
-      h(NButton, { size: 'small', text: true, type: 'primary', onClick: () => openItemEdit(r) }, { default: () => '编辑' }),
-      h(NButton, {
-        size: 'small', text: true, type: 'error',
-        onClick: () => dialog.warning({
-          title: '删除明细',
-          content: `确定删除「${spuName(r.spu_id)}」的价格明细？`,
-          positiveText: '删除',
-          negativeText: '取消',
-          onPositiveClick: () => removeItem(r),
-        }),
-      }, { default: () => '删除' }),
-    ]),
-  },
-])
+const selectedCustomer = computed(() => customers.value.find((c) => c.id === customerId.value) || null)
+/** 客户摘要：客户名 · 等级（未分配等级时说明按建议零售价成交）· 结果条数 */
+const summaryText = computed(() => {
+  const c = selectedCustomer.value
+  if (!c) return ''
+  const level = c.level_id
+    ? `等级：${c.level_nickname || c.level_code || '—'}`
+    : '未分配等级（按建议零售价成交）'
+  return `客户：${c.name} · ${level}${total.value ? ` · 共 ${total.value} 个规格` : ''}`
+})
+const skuOptions = computed(() =>
+  skus.value.map((s) => ({
+    label: (s.specs ? Object.values(s.specs).filter(Boolean).join('/') : s.remark || '') || `SKU ${s.id}`,
+    value: s.id,
+  })),
+)
 
-const showBookModal = ref(false)
-const bookForm = ref({ id: null as number | null, name: '', channel_type: 'county_wholesale' as PriceChannelType })
-
-const showItemModal = ref(false)
-const itemForm = ref({ id: null as number | null, spu_id: null as number | null, price: 0, effective_date: '' })
-
-function selectBook(id: number) {
-  currentBookId.value = id
-}
-
-function openBookCreate() {
-  bookForm.value = { id: null, name: '', channel_type: 'county_wholesale' }
-  showBookModal.value = true
-}
-
-function openBookEdit(r: PriceBook) {
-  bookForm.value = { id: r.id, name: r.name, channel_type: r.channel_type }
-  showBookModal.value = true
-}
-
-async function saveBook() {
-  if (!bookForm.value.name.trim()) return message.warning('请输入价格簿名称')
-  saving.value = true
-  try {
-    if (bookForm.value.id) {
-      await priceBookApi.update(bookForm.value.id, { name: bookForm.value.name, channel_type: bookForm.value.channel_type })
-    } else {
-      const created = await priceBookApi.create({ name: bookForm.value.name, channel_type: bookForm.value.channel_type })
-      currentBookId.value = created.id
-    }
-    message.success('价格簿已保存')
-    showBookModal.value = false
-    await loadBooks()
-  } finally {
-    saving.value = false
+/** 点击行内空白处展开（点左侧展开箭头时跳过，避免双重切换） */
+function rowProps(row: CustomerPriceRow) {
+  return {
+    style: 'cursor: pointer',
+    onClick: (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest?.('.n-data-table-expand-trigger')) return
+      const idx = expandedKeys.value.indexOf(row.sku_id)
+      if (idx >= 0) expandedKeys.value.splice(idx, 1)
+      else expandedKeys.value.push(row.sku_id)
+    },
   }
 }
 
-async function removeBook(r: PriceBook) {
-  await priceBookApi.remove(r.id)
-  if (currentBookId.value === r.id) currentBookId.value = null
-  message.success('价格簿已删除')
-  await Promise.all([loadBooks(), loadItems()])
+function money(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '—'
+  return `¥${Number(value).toFixed(2)}`
 }
 
-function openItemCreate() {
-  if (!currentBook.value) return
-  itemForm.value = { id: null, spu_id: null, price: 0, effective_date: '' }
-  showItemModal.value = true
+/** 成交价单元格：低于最低售价时加一个提示标签（专属价在成本上涨后会出现） */
+function renderPrice(r: CustomerPriceRow) {
+  return h('div', { style: 'display:flex;align-items:center;gap:6px' }, [
+    h('span', { style: 'color:var(--primary);font-weight:600' }, money(r.unit_price)),
+    r.below_min
+      ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '低于最低售价' })
+      : null,
+  ])
 }
 
-function openItemEdit(r: PriceBookItem) {
-  itemForm.value = { id: r.id, spu_id: r.spu_id, price: Number(r.price), effective_date: r.effective_date }
-  showItemModal.value = true
+function renderSkuPanel(r: CustomerPriceRow) {
+  const items: { label: string; value: string }[] = [
+    { label: '建议零售价', value: money(r.suggested_price) },
+    { label: '等级价', value: money(r.level_price) },
+    { label: '最低售价', value: money(r.min_price) },
+    { label: '成本价', value: money(r.cost_price) },
+    {
+      label: '1 个 SKU 等于',
+      value: `${r.base_qty}${r.base_unit ? ` ${r.base_unit}` : ''}`,
+    },
+    { label: '数量小数', value: r.allow_decimal ? '允许 1 位小数' : '必须整数' },
+  ]
+  return h('div', { style: 'padding: 8px 8px 8px 32px' }, [
+    h(NDescriptions, { column: 3, size: 'small', bordered: true, labelStyle: 'width:120px' }, {
+      default: () =>
+        items.map((item) =>
+          h(NDescriptionsItem, { label: item.label }, { default: () => item.value }),
+        ),
+    }),
+  ])
 }
 
-async function saveItem() {
-  if (!currentBook.value) return
-  if (!itemForm.value.spu_id) return message.warning('请选择商品')
-  if (!itemForm.value.effective_date) return message.warning('请选择生效日期')
-  saving.value = true
-  try {
-    if (itemForm.value.id) {
-      await priceBookApi.updateItem(itemForm.value.id, { price: itemForm.value.price, effective_date: itemForm.value.effective_date })
-    } else {
-      await priceBookApi.createItem({
-        book_id: currentBook.value.id,
-        spu_id: itemForm.value.spu_id,
-        price: itemForm.value.price,
-        effective_date: itemForm.value.effective_date,
-      })
+const columns = computed<DataTableColumns<CustomerPriceRow>>(() => [
+  { type: 'expand', title: '', width: 48, renderExpand: (r) => renderSkuPanel(r) },
+  {
+    title: '商品', key: 'spu_name', minWidth: 180,
+    render: (r) =>
+      h('div', [
+        h('div', { style: 'font-size:13px' }, r.spu_name),
+        h('div', { style: 'font-size:12px;color:var(--text-3)' }, r.spu_code),
+      ]),
+  },
+  { title: '规格', key: 'sku_spec', width: 140, render: (r) => r.sku_spec || '—' },
+  { title: '成交价', key: 'unit_price', width: 200, render: (r) => renderPrice(r) },
+  {
+    title: '价格来源', key: 'price_source', width: 130,
+    render: (r) =>
+      h(NTag, { size: 'small', type: PRICE_SOURCE[r.price_source].type, bordered: false }, {
+        default: () => PRICE_SOURCE[r.price_source].label,
+      }),
+  },
+  {
+    title: '来源设定时间', key: 'price_source_set_at', width: 160,
+    render: (r) => (r.price_source_set_at ? formatDate(r.price_source_set_at) : '—'),
+  },
+  {
+    title: '状态', key: 'is_enabled', width: 80,
+    render: (r) =>
+      r.is_enabled ? '' : h(NTag, { size: 'small', type: 'default', bordered: false }, { default: () => '已停用' }),
+  },
+])
+
+/** 客户换人：清掉 SKU 选择，回到第一页重查 */
+function onCustomerChange() {
+  page.value = 1
+  load()
+}
+
+/** 商品换人：SKU 选项跟着换，回到第一页重查 */
+async function onSpuChange() {
+  skuId.value = null
+  skus.value = []
+  if (spuId.value) {
+    skuLoading.value = true
+    try {
+      skus.value = await productApi.skus(spuId.value)
+    } finally {
+      skuLoading.value = false
     }
-    message.success('明细已保存')
-    showItemModal.value = false
-    await loadItems()
+  }
+  page.value = 1
+  load()
+}
+
+async function loadSpus(kw = '') {
+  spuLoading.value = true
+  try {
+    const list = await productApi.spus({ keyword: kw || undefined, page: 1, page_size: PAGE_SIZE })
+    spuOptions.value = list.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))
   } finally {
-    saving.value = false
+    spuLoading.value = false
   }
 }
 
-async function removeItem(r: PriceBookItem) {
-  await priceBookApi.removeItem(r.id)
-  message.success('明细已删除')
-  await loadItems()
+function searchSpus(kw: string) {
+  clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => loadSpus(kw.trim()), 300)
 }
 
-async function loadBooks() {
+/** 未选客户不发请求（页面空状态提示先选客户） */
+async function load() {
+  if (!customerId.value) {
+    rows.value = []
+    total.value = 0
+    return
+  }
   loading.value = true
   try {
-    // /price-books 返回裸数组无 total，统一 page_size=20 逐页拉全量
-    books.value = await fetchAllPages((p) => priceBookApi.list({ keyword: bookKeyword.value || undefined, page: p, page_size: PAGE_SIZE }))
-    if (currentBookId.value && !books.value.some((b) => b.id === currentBookId.value)) {
-      currentBookId.value = null
-    }
+    const res = await priceApi.customerPrices({
+      customer_id: customerId.value,
+      spu_id: spuId.value || undefined,
+      sku_id: skuId.value || undefined,
+      keyword: keyword.value.trim() || undefined,
+      page: page.value,
+      page_size: pageSize,
+    })
+    rows.value = res.items
+    total.value = res.total
   } finally {
     loading.value = false
   }
 }
 
-async function loadItems() {
-  itemsLoading.value = true
-  try {
-    // /price-book-items 无 book_id 服务端筛选参数（Apifox），统一 page_size=20 逐页拉全量后前端按簿过滤
-    allItems.value = await fetchAllPages((p) => priceBookApi.items({ page: p, page_size: PAGE_SIZE }))
-  } finally {
-    itemsLoading.value = false
-  }
+function applyFilters() {
+  page.value = 1
+  expandedKeys.value = []
+  load()
+}
+
+function resetFilters() {
+  spuId.value = null
+  skuId.value = null
+  skus.value = []
+  keyword.value = ''
+  applyFilters()
 }
 
 onMounted(async () => {
-  loading.value = true
-  try {
-    // 商品下拉需全量选项：统一 page_size=20 逐页拉取
-    const spuList = await fetchAllPages((p) => productApi.spus({ page: p, page_size: PAGE_SIZE }))
-    spuOptions.value = spuList.map((s) => ({ label: `${s.name} (${s.code})`, value: s.id }))
-    spus.value = spuList
-    await Promise.all([loadBooks(), loadItems()])
-  } finally {
-    loading.value = false
-  }
+  // 客户下拉需全量选项：统一 page_size=20 逐页拉取
+  customers.value = await fetchAllPages((p) => adminCustomerApi.list({ page: p, page_size: PAGE_SIZE }))
+  customerOptions.value = customers.value.map((c) => ({ label: c.name, value: c.id }))
+  await loadSpus()
 })
 </script>
 
 <style scoped>
-:deep(.row-active) td {
-  background-color: var(--primary-soft);
-}
+.filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.pagination-bar { display: flex; justify-content: flex-end; margin-top: 12px; }
 </style>

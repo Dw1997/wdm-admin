@@ -5,7 +5,8 @@ export function formatMoney(n: number | string | undefined | null, withSymbol = 
   if (n === undefined || n === null || n === '') return withSymbol ? '¥0.00' : '0.00'
   const num = Number(n)
   if (Number.isNaN(num)) return withSymbol ? '¥0.00' : '0.00'
-  return (withSymbol ? '¥' : '') + num.toFixed(2)
+  const sign = num < 0 ? '-' : ''
+  return sign + (withSymbol ? '¥' : '') + Math.abs(num).toFixed(2)
 }
 
 export function formatQty(n: number | undefined | null): string {

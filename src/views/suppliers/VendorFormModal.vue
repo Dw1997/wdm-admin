@@ -56,13 +56,11 @@
             </n-form-item>
           </n-gi>
           <n-gi :span="2">
-            <n-form-item label="省 / 市 / 区">
-              <n-cascader
+            <n-form-item label="所在地区">
+              <RegionPicker
                 v-model:value="regionValue"
-                :options="regionCascaderOptions"
-                clearable
-                placeholder="请选择省市区"
-                @update:value="applyRegion"
+                :fallback-label="[form.province, form.city, form.district, form.town].filter(Boolean).join(' / ')"
+                @change="applyRegion"
               />
             </n-form-item>
           </n-gi>
@@ -97,10 +95,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch } from 'vue'
 import { useDialog, useMessage, type FormInst, type FormRules } from 'naive-ui'
-import { vendorApi, regionApi } from '@/api'
+import { vendorApi } from '@/api'
 import { VENDOR_STATUS_OPTIONS, VENDOR_TYPE_OPTIONS } from '@/utils/dict'
 import { formatDate } from '@/utils/format'
-import type { RegionNode, Vendor, VendorPayload } from '@/types'
+import type { RegionSelection, Vendor, VendorPayload } from '@/types'
+import RegionPicker from '@/components/RegionPicker.vue'
 
 // vendorId 为空表示新建；有值表示编辑该供应商
 const props = defineProps<{ show: boolean; vendorId: number | null }>()
@@ -147,41 +146,15 @@ const rules: FormRules = {
   phone: [{ pattern: /^1[3-9]\d{9}$/, message: '请输入 11 位手机号', trigger: 'blur' }],
 }
 
-// ---- 省市区级联（只在第一次打开时加载） ----
-const regionOptions = ref<RegionNode[]>([])
+// ---- 省/市/县/乡镇选择 ----
 const regionValue = ref<number | null>(null)
 
-function mapRegion(node: RegionNode): any {
-  return { label: node.name, value: node.id, children: node.children?.length ? node.children.map(mapRegion) : undefined }
-}
-const regionCascaderOptions = computed(() => regionOptions.value.map(mapRegion))
-
-function findRegionPath(nodes: RegionNode[], target: number, path: RegionNode[] = []): RegionNode[] | null {
-  for (const node of nodes) {
-    const p = [...path, node]
-    if (node.id === target) return p
-    if (node.children) {
-      const found = findRegionPath(node.children, target, p)
-      if (found) return found
-    }
-  }
-  return null
-}
-
-function applyRegion() {
-  const path = regionValue.value == null ? [] : findRegionPath(regionOptions.value, Number(regionValue.value)) || []
-  form.province = path[0]?.name || ''
-  form.city = path[1]?.name || ''
-  form.district = path[2]?.name || ''
-}
-
-function regionIdByNames(province: string, city: string, district: string): number | null {
-  const p = regionOptions.value.find((n) => n.name === province)
-  if (!p) return null
-  const c = city ? p.children?.find((n) => n.name === city) : null
-  if (!c) return p.id
-  const d = district ? c.children?.find((n) => n.name === district) : null
-  return (d || c).id
+function applyRegion(sel: RegionSelection | null) {
+  form.province = sel?.province || ''
+  form.city = sel?.city || ''
+  form.district = sel?.district || ''
+  if (sel?.town) form.town = sel.town
+  else if (!sel) form.town = ''
 }
 
 // ---- 打开时重置 / 回填 ----
@@ -193,7 +166,7 @@ function fill(v: Vendor) {
     province: v.province || '', city: v.city || '', district: v.district || '',
     town: v.town || '', detail_address: v.detail_address || '',
   })
-  regionValue.value = v.province ? regionIdByNames(v.province, v.city || '', v.district || '') : null
+  regionValue.value = null
   snapshot = JSON.stringify(form)
 }
 
@@ -209,7 +182,6 @@ async function open() {
   formRef.value?.restoreValidation()
   loading.value = true
   try {
-    if (!regionOptions.value.length) regionOptions.value = await regionApi.tree()
     if (props.vendorId !== null) fill(await vendorApi.get(props.vendorId))
   } catch (e: any) {
     if (e?.response?.status === 404) {

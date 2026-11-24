@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useRoute, useRouter } from 'vue-router'
+import { Eye, Printer } from '@vicons/tabler'
 
 import { customerApi, orderApi, returnApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
@@ -232,13 +233,27 @@ onMounted(() => {
                 <td>{{ row.status === 'confirmed' ? returnSettlementLabels[row.settlement_status] : '—' }}</td>
                 <td>{{ row.created_by_name || '—' }}</td>
                 <td>
-                  <n-space :wrap="false">
-                    <n-button text type="primary" @click="open(row, 'view')">查看</n-button>
+                  <n-space :wrap="false" align="center" :size="10">
+                    <n-tooltip placement="top" :delay="150">
+                      <template #trigger>
+                        <n-button text type="primary" aria-label="查看" @click="open(row, 'view')">
+                          <template #icon><n-icon :component="Eye" :size="17" /></template>
+                        </n-button>
+                      </template>
+                      查看
+                    </n-tooltip>
                     <template v-if="row.status === 'pending' && allowed('return.confirm')">
                       <n-button text type="primary" @click="open(row, 'confirm')">确认</n-button>
                       <n-button text type="error" @click="open(row, 'reject')">驳回</n-button>
                     </template>
-                    <n-button v-if="row.status === 'confirmed' && allowed('print.documents')" text type="primary" :disabled="printing !== null" @click="print(row)">打单</n-button>
+                    <n-tooltip v-if="row.status === 'confirmed' && allowed('print.documents')" placement="top" :delay="150">
+                      <template #trigger>
+                        <n-button text type="primary" aria-label="打单" :disabled="printing !== null" @click="print(row)">
+                          <template #icon><n-icon :component="Printer" :size="17" /></template>
+                        </n-button>
+                      </template>
+                      打单
+                    </n-tooltip>
                     <n-tooltip v-if="row.status === 'confirmed' && Number(row.available_credit_amount) > 0 && allowed('return.settle')">
                       <template #trigger><span><n-button text disabled>平单</n-button></span></template>
                       退货平单页尚未开放
