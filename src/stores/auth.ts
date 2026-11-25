@@ -19,12 +19,18 @@ export const useAuthStore = defineStore('auth', () => {
     return name ? name.charAt(0).toUpperCase() : '管'
   })
 
+  function setTokens(newAccessToken: string, newRefreshToken?: string) {
+    accessToken.value = newAccessToken
+    localStorage.setItem(ACCESS_KEY, newAccessToken)
+    if (newRefreshToken) {
+      refreshToken.value = newRefreshToken
+      localStorage.setItem(REFRESH_KEY, newRefreshToken)
+    }
+  }
+
   async function login(username: string, password: string) {
     const tokens = await authApi.login(username, password)
-    accessToken.value = tokens.access_token
-    refreshToken.value = tokens.refresh_token
-    localStorage.setItem(ACCESS_KEY, tokens.access_token)
-    localStorage.setItem(REFRESH_KEY, tokens.refresh_token)
+    setTokens(tokens.access_token, tokens.refresh_token)
     await fetchMe()
   }
 
@@ -54,5 +60,5 @@ export const useAuthStore = defineStore('auth', () => {
     clearSession()
   }
 
-  return { accessToken, refreshToken, user, isLoggedIn, userInitial, login, logout, clearSession, fetchMe }
+  return { accessToken, refreshToken, user, isLoggedIn, userInitial, login, logout, clearSession, fetchMe, setTokens }
 })
