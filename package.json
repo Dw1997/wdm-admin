@@ -9,7 +9,9 @@
     "build": "vite build",
     "build:check": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "type-check": "vue-tsc --noEmit"
+    "type-check": "vue-tsc --noEmit",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@vicons/tabler": "^0.13.0",
@@ -23,6 +25,7 @@
     "vue-router": "^4.4.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^22.7.5",
     "@vitejs/plugin-vue": "^5.1.4",
     "sass": "^1.79.4",

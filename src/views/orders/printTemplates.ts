@@ -174,7 +174,7 @@ function salesNotePages(note: SalesNote, options: SalesPrintOptions): string {
       <div class="n-total">
         <div>合计（大写） <b>${rmbUpper(note.amount_due)}</b>${
           Number(note.coupon_amount) > 0
-            ? `　商品金额 ¥${formatMoney(note.total_amount)}　优惠券抵扣${note.coupon_name ? `（${escapeHtml(note.coupon_name)}）` : ''} −${formatMoney(note.coupon_amount)}`
+            ? `　商品金额 ¥${formatMoney(note.total_amount)}　优惠券抵扣${note.coupon_name ? `（${escapeHtml(note.coupon_name)}）` : ''} −${formatMoney(note.coupon_amount ?? 0)}`
             : ''
         }${
           Number(note.freight_deduction) > 0 ? `　运费抵扣 −${formatMoney(note.freight_deduction)}` : ''

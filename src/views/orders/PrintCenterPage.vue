@@ -413,6 +413,7 @@ const noPermission = computed(() => !!auth.user && auth.user.role !== 'admin')
 
 const mode = ref<'sales' | 'picking'>('sales')
 const paper = ref<SalesPaper>('half')
+const setupVisible = ref(false)
 const paperOptions = [
   { label: '二等分 241×140', value: 'half' },
   { label: '整张 241×280', value: 'full' },

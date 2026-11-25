@@ -1,4 +1,17 @@
-import type { ReturnOrder, ReturnPreview, ReturnCreateInput, ReturnConfirmInput, ReturnResult, LedgerOffset, StockRow, StockMovementRow } from '@/types'
+import type {
+  ReturnOrder,
+  ReturnPreview,
+  ReturnCreateInput,
+  ReturnConfirmInput,
+  ReturnResult,
+  LedgerOffset,
+  StockRow,
+  StockMovementRow,
+  PurchasePlanPreviewPayload,
+  PurchasePlanPreviewResult,
+  PurchasePlanToReceiptsPayload,
+  PurchasePlanToReceiptsResult,
+} from '@/types'
 
 // src/api/index.ts - Public API facade (one module per backend resource).
 import { get, post, put, patch, del } from './http'
@@ -263,6 +276,17 @@ export const stockApi = {
     post<StockRow>(`/stocks/${spuId}/adjust`, payload),
   movements: (q: { spu_id?: number; sku_id?: number; type?: string; date_from?: string; date_to?: string; page?: number; page_size?: number } = {}) =>
     get<PageResult<StockMovementRow>>('/stock-movements', { params: q }),
+}
+
+export const purchasePlanApi = {
+  preview: (payload: PurchasePlanPreviewPayload = {}) =>
+    post<PurchasePlanPreviewResult>('/purchase-plans/preview', payload),
+  toReceipts: (payload: PurchasePlanToReceiptsPayload, idempotencyKey?: string) =>
+    post<PurchasePlanToReceiptsResult>(
+      '/purchase-plans/to-receipts',
+      payload,
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined,
+    ),
 }
 
 // Customers

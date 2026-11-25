@@ -115,6 +115,12 @@ const routes: RouteRecordRaw[] = [
     meta: { title: '进货管理' },
     children: [
       {
+        path: 'purchase-plans',
+        name: 'inventory-purchase-plans',
+        component: () => import('@/views/inventory/PurchasePlanPage.vue'),
+        meta: { title: '采购清单' },
+      },
+      {
         path: 'purchases',
         name: 'inventory-purchases',
         component: () => import('@/views/inventory/PurchaseReceiptsPage.vue'),

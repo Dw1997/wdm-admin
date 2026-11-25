@@ -39,12 +39,10 @@
             {{ pendingAdjustment.items_count }} 个商品改价，原因：{{ pendingAdjustment.reason || '—' }}；金额变化
             <strong class="danger">{{ diffText(pendingAdjustment.total_diff_amount) }}</strong>。处理完成前不能送达。
           </div>
-          <template #action>
-            <n-space>
-              <n-button size="small" type="primary" @click="openAdjustApprove">同意改价</n-button>
-              <n-button size="small" type="error" secondary @click="openAdjustReject">驳回</n-button>
-            </n-space>
-          </template>
+          <n-space style="margin-top: 10px">
+            <n-button size="small" type="primary" @click="openAdjustApprove">同意改价</n-button>
+            <n-button size="small" type="error" secondary @click="openAdjustReject">驳回</n-button>
+          </n-space>
         </n-alert>
 
         <OrderEditForm

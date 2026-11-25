@@ -2640,3 +2640,105 @@ export interface ReferralRewardListResult {
     issued_amount: string
   }
 }
+
+export type PurchasePlanScopeMode = 'all_pending' | 'route_trip' | 'freight_shipment' | 'date'
+
+export interface PurchasePlanSupplierOverride {
+  spu_id: number
+  sku_id?: number | null
+  supplier_id: number
+}
+
+export interface PurchasePlanPreviewPayload {
+  route_trip_id?: number | null
+  freight_shipment_id?: number | null
+  date?: string | null
+  supplier_id?: number | null
+  include_self_shortage?: boolean
+  supplier_overrides?: PurchasePlanSupplierOverride[]
+}
+
+export interface PurchasePlanOrderRef {
+  order_id: number
+  order_no: string
+  customer_name: string
+  order_item_id: number
+  quantity: string
+  unit: string
+  unit_cost: string
+  purchase_receipt_id: number | null
+  receipt_status: string | null
+  receipt_version: number | null
+  vendor_id: number
+  vendor_name: string
+}
+
+export interface PurchasePlanItem {
+  item_key: string
+  spu_id: number
+  spu_name: string
+  sku_id: number | null
+  sku_name: string
+  supply_mode: 'temp_pick' | 'self' | string
+  unit: string
+  base_unit: string
+  base_qty: string
+  required_quantity: string
+  on_hand: string | null
+  shortage_quantity: string
+  suggested_unit_cost: string
+  estimated_amount: string
+  display: string
+  can_create_receipt: boolean
+  has_auto_receipt: boolean
+  order_nos: string[]
+  orders: PurchasePlanOrderRef[]
+}
+
+export interface PurchasePlanGroup {
+  supplier_id: number
+  supplier_name: string
+  supplier_phone: string | null
+  supplier_address: string | null
+  item_count: number
+  estimated_amount: string
+  can_create_receipt: boolean
+  items: PurchasePlanItem[]
+}
+
+export interface PurchasePlanPreviewResult {
+  scope: {
+    mode: PurchasePlanScopeMode
+    label: string
+    route_trip_id?: number | null
+    freight_shipment_id?: number | null
+    date?: string | null
+  }
+  include_self_shortage: boolean
+  summary: {
+    supplier_count: number
+    item_count: number
+    order_count: number
+    estimated_amount: string
+  }
+  groups: PurchasePlanGroup[]
+}
+
+export interface PurchasePlanToReceiptsPayload {
+  groups: {
+    supplier_id: number
+    items: {
+      spu_id: number
+      sku_id?: number | null
+      quantity: string
+      unit_cost?: string
+    }[]
+  }[]
+  purchased_at?: string
+  remark?: string
+}
+
+export interface PurchasePlanToReceiptsResult {
+  receipts: PurchaseReceipt[]
+  warnings: ApiWarning[]
+}

@@ -169,6 +169,7 @@ const menuOptions = computed(() => [
   },
   {
     label: '进货管理', key: 'inventory', icon: renderIcon(BuildingFactory), children: [
+      { label: '采购清单', key: '/inventory/purchase-plans', icon: renderIcon(FileInvoice) },
       { label: '采购入库', key: '/inventory/purchases', icon: renderIcon(ClipboardList) },
       { label: '库存查询', key: '/inventory/stocks', icon: renderIcon(Package) },
       { label: '供应商管理', key: '/suppliers/list', icon: renderIcon(BuildingCommunity) },
