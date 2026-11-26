@@ -209,7 +209,8 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, reactive, computed, onMounted } from 'vue'
+import { h, ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { NButton, NTag, useMessage, type DataTableColumns, type SelectOption } from 'naive-ui'
 import { adminCustomerApi, customerTagApi, deliveryApi, levelApi, vendorApi, fetchAllPages, PAGE_SIZE } from '@/api'
 import type { AdminCustomer, CustomerTag, LevelConfig, RecordFreightLine, RegionSelection, SalesOption, Vendor } from '@/types'
@@ -218,12 +219,13 @@ import RegionPicker from '@/components/RegionPicker.vue'
 import { actionBar, actionIcon } from '@/components/tableActions'
 
 const message = useMessage()
+const route = useRoute()
 const auth = useAuthStore()
 const list = ref<AdminCustomer[]>([])
 const levels = ref<LevelConfig[]>([])
 const tags = ref<CustomerTag[]>([])
 const freightLines = ref<RecordFreightLine[]>([])
-const keyword = ref('')
+const keyword = ref(typeof route.query.keyword === 'string' ? route.query.keyword : '')
 const tagFilter = ref<number | null>(null)
 const status = ref<string | null>(null)
 const salesFilter = ref<number | null>(null)
@@ -346,6 +348,17 @@ function search() {
   page.value = 1
   reload()
 }
+
+// 顶部全局搜索跳转或在本页再次选择客户时，同步路由 keyword 到筛选框
+watch(
+  () => route.query.keyword,
+  () => {
+    const next = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+    if (next === keyword.value) return
+    keyword.value = next
+    search()
+  },
+)
 
 /** /customers 返回裸数组无 total（Apifox CustomerResponse[]），统一 page_size=20 逐页拉全量后前端分页 */
 async function reload() {

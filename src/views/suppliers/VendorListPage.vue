@@ -54,7 +54,8 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, reactive, computed, onMounted } from 'vue'
+import { h, ref, reactive, computed, watch, onMounted } from 'vue'
+import { useRoute } from 'vue-router'
 import { NButton, NTag, useMessage, type DataTableColumns } from 'naive-ui'
 import { vendorApi } from '@/api'
 import { VENDOR_STATUS_OPTIONS, VENDOR_TYPE_OPTIONS, vendorStatusMeta, vendorTypeLabel } from '@/utils/dict'
@@ -64,13 +65,18 @@ import VendorFormModal from './VendorFormModal.vue'
 import { actionBar, actionIcon } from '@/components/tableActions'
 
 const message = useMessage()
+const route = useRoute()
 
 const loading = ref(false)
 const rows = ref<Vendor[]>([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = ref(20)
-const filters = reactive<{ keyword: string; type: string[]; status: string[] }>({ keyword: '', type: [], status: [] })
+const filters = reactive<{ keyword: string; type: string[]; status: string[] }>({
+  keyword: typeof route.query.keyword === 'string' ? route.query.keyword : '',
+  type: [],
+  status: [],
+})
 
 const typeOpts = VENDOR_TYPE_OPTIONS
 const statusOpts = VENDOR_STATUS_OPTIONS
@@ -156,6 +162,17 @@ function onSearch() {
   page.value = 1
   load()
 }
+
+// 顶部全局搜索跳转或在本页再次选择供应商时，同步路由 keyword 到筛选框
+watch(
+  () => route.query.keyword,
+  () => {
+    const next = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+    if (next === filters.keyword) return
+    filters.keyword = next
+    onSearch()
+  },
+)
 
 function onReset() {
   filters.keyword = ''

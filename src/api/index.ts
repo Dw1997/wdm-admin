@@ -711,3 +711,37 @@ export const couponApi = {
   listReferralRecords: (params: { status?: string; keyword?: string; page?: number; page_size?: number } = {}) =>
     get<ReferralRewardListResult>('/coupons/referral-records', { params }),
 }
+
+// 顶部全局搜索：复用已有列表接口做只读检索。统一 silent，避免输入防抖取消或网络异常时弹出全局错误提示
+export const globalSearchApi = {
+  orders: (keyword: string, signal?: AbortSignal) =>
+    get<OrderListItem[] | PageResult<OrderListItem>>('/orders', {
+      params: { keyword, page: 1, page_size: 5 },
+      silent: true,
+      signal,
+    }).then(toItems),
+  customers: (keyword: string, signal?: AbortSignal) =>
+    get<AdminCustomer[] | PageResult<AdminCustomer>>('/customers', {
+      params: { keyword, page: 1, page_size: 5 },
+      silent: true,
+      signal,
+    }).then(toItems),
+  products: (keyword: string, signal?: AbortSignal) =>
+    get<ProductSPU[] | PageResult<ProductSPU>>('/spus', {
+      params: { keyword, page: 1, page_size: 5 },
+      silent: true,
+      signal,
+    }).then(toItems),
+  vendors: (keyword: string, signal?: AbortSignal) =>
+    get<Vendor[] | PageResult<Vendor>>('/vendors', {
+      params: { keyword, page: 1, page_size: 5 },
+      silent: true,
+      signal,
+    }).then(toItems),
+  trips: (keyword: string, signal?: AbortSignal) =>
+    get<RouteTrip[] | PageResult<RouteTrip>>('/route-trips', {
+      params: { keyword, page: 1, page_size: 5 },
+      silent: true,
+      signal,
+    }).then(toItems),
+}

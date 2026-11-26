@@ -35,13 +35,20 @@
         </div>
         <div class="header-right">
           <n-select
+            ref="searchSelectRef"
             v-model:value="searchValue"
             :options="searchOptions"
+            remote
             filterable
             clearable
             size="small"
-            placeholder="搜索功能"
-            style="width: 220px"
+            :loading="searchLoading"
+            :consistent-menu-width="false"
+            :menu-props="{ style: { width: '380px' } }"
+            :render-label="renderSearchLabel"
+            :placeholder="searchPlaceholder"
+            style="width: 260px"
+            @search="onSearchInput"
             @update:value="onSearchSelect"
           />
           <n-button quaternary circle :title="app.isDark ? '切换为浅色' : '切换为深色'" @click="app.toggleTheme()">
@@ -102,19 +109,24 @@
 </template>
 
 <script setup lang="ts">
-import { h, ref, computed, watch, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { useMessage, useDialog, type MenuGroupOption, type MenuOption } from 'naive-ui'
-import { NIcon } from 'naive-ui'
+import { h, ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { useRoute, useRouter, type RouteLocationRaw } from 'vue-router'
+import { useMessage, useDialog, type MenuGroupOption, type MenuOption, type SelectInst, type SelectOption, type SelectRenderLabel } from 'naive-ui'
+import { NIcon, NTag } from 'naive-ui'
 import {
   Dashboard, ShoppingCart, Tag, Users, BuildingCommunity,
   ClipboardList, Cash, Settings, Bell, ChevronDown, Power, UserCircle, Lock, Truck,
   Plus, Package, Tags, UserCheck, Medal, MapPin, TrendingUp, Printer, Coin, Wallet, ShieldCheck, FileSearch, ChartLine, BuildingFactory, ClipboardPlus, ReceiptRefund, FileInvoice, Route, Sun, Moon,
 } from '@vicons/tabler'
-import { accountApi } from '@/api'
+import { accountApi, globalSearchApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import { useAppStore } from '@/stores/app'
 import { useTabsStore } from '@/stores/tabs'
+import { confirmAction } from '@/utils/confirm'
+import { buildFeatureOptionGroups } from '@/config/globalSearch'
+import { ORDER_LIST_STATUS, ROUTE_TRIP_STATUS, vendorStatusMeta } from '@/utils/dict'
+import { formatDate, formatMoney, formatPhone } from '@/utils/format'
+import type { AdminCustomer, OrderListItem, ProductSPU, RouteTrip, Vendor } from '@/types'
 
 const route = useRoute()
 const router = useRouter()
@@ -126,6 +138,7 @@ const dialog = useDialog()
 
 const collapsed = ref(false)
 const searchValue = ref<string | null>(null)
+const searchSelectRef = ref<SelectInst | null>(null)
 const passwordVisible = ref(false)
 const passwordSaving = ref(false)
 const oldPassword = ref('')
@@ -217,25 +230,266 @@ const menuOptions = computed(() => [
   },
 ])
 
-const searchOptions = computed(() => {
-  const options: { label: string; value: string }[] = []
-  const walk = (items: { label: string; key: string; children?: unknown[] }[]) => {
-    for (const item of items) {
-      if (item.children?.length) {
-        walk(item.children as { label: string; key: string; children?: unknown[] }[])
-      } else if (item.key && item.key.startsWith('/')) {
-        options.push({ label: item.label, value: item.key })
-      }
-    }
-  }
-  walk(menuOptions.value as { label: string; key: string; children?: unknown[] }[])
-  return options
+type SearchTagType = 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'
+
+interface SearchLeafOption extends SelectOption {
+  title: string
+  subtitle?: string
+  tagText?: string
+  tagType?: SearchTagType
+  to?: RouteLocationRaw
+}
+
+interface SearchOptionGroup {
+  type: 'group'
+  key: string
+  label: string
+  children: SearchLeafOption[]
+  [k: string]: unknown
+}
+
+const isMac = /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent)
+const searchPlaceholder = `搜索功能/单号/客户/商品 (${isMac ? '⌘K' : 'Ctrl+K'})`
+
+const searchQuery = ref('')
+const searchLoading = ref(false)
+const remoteGroups = ref<SearchOptionGroup[]>([])
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+let searchController: AbortController | null = null
+
+const featureGroups = computed<SearchOptionGroup[]>(() =>
+  buildFeatureOptionGroups(isAdmin.value, searchQuery.value).map((group): SearchOptionGroup => ({
+    type: 'group',
+    key: group.key,
+    label: group.label,
+    children: group.children.map((child): SearchLeafOption => ({
+      value: child.value,
+      label: child.label,
+      title: child.label,
+      subtitle: child.description,
+    })),
+  })),
+)
+
+const searchOptions = computed<SearchOptionGroup[]>(() => {
+  const query = searchQuery.value.trim()
+  if (!query) return featureGroups.value
+  // 单号 / 手机号等纯数字检索：无系统功能命中时让业务数据排在最前
+  const numericQuery = /^[\d\s-]+$/.test(query)
+  if (numericQuery && featureGroups.value.length === 0) return remoteGroups.value
+  return [...featureGroups.value, ...remoteGroups.value]
 })
 
-function onSearchSelect(key: string | number | null) {
-  if (typeof key === 'string' && key.startsWith('/')) {
-    router.push(key)
-    searchValue.value = null
+function settledItems<T>(result: PromiseSettledResult<T[]>): T[] {
+  return result.status === 'fulfilled' ? result.value : []
+}
+
+function buildOrderGroup(items: OrderListItem[]): SearchOptionGroup | null {
+  if (!items.length) return null
+  return {
+    type: 'group',
+    key: 'biz:orders',
+    label: '订单',
+    children: items.map((order) => {
+      const status = ORDER_LIST_STATUS[order.status]
+      return {
+        value: `order:${order.id}`,
+        label: order.order_no,
+        title: order.order_no,
+        subtitle: `${order.customer_name} · ${formatMoney(order.total_amount)}`,
+        tagText: status.label,
+        tagType: status.type,
+        to: `/order-center/detail/${order.id}`,
+      }
+    }),
+  }
+}
+
+function buildCustomerGroup(items: AdminCustomer[]): SearchOptionGroup | null {
+  if (!items.length) return null
+  return {
+    type: 'group',
+    key: 'biz:customers',
+    label: '客户',
+    children: items.map((customer) => ({
+      value: `customer:${customer.id}`,
+      label: customer.name,
+      title: customer.name,
+      subtitle: [formatPhone(customer.phone ?? undefined), customer.tag_name, customer.sales_name].filter(Boolean).join(' · '),
+      to: { path: '/customers/list', query: { keyword: customer.name } },
+    })),
+  }
+}
+
+function buildProductGroup(items: ProductSPU[]): SearchOptionGroup | null {
+  if (!items.length) return null
+  return {
+    type: 'group',
+    key: 'biz:products',
+    label: '商品',
+    children: items.map((product) => ({
+      value: `product:${product.id}`,
+      label: product.name,
+      title: product.name,
+      subtitle: [product.code, product.sku_count ? `${product.sku_count} SKU` : ''].filter(Boolean).join(' · '),
+      to: `/spus/edit/${product.id}`,
+    })),
+  }
+}
+
+function buildVendorGroup(items: Vendor[]): SearchOptionGroup | null {
+  if (!items.length) return null
+  return {
+    type: 'group',
+    key: 'biz:vendors',
+    label: '供应商',
+    children: items.map((vendor) => {
+      const status = vendorStatusMeta(vendor.status)
+      return {
+        value: `vendor:${vendor.id}`,
+        label: vendor.name,
+        title: vendor.name,
+        subtitle: [formatPhone(vendor.phone ?? undefined), vendor.contact_name, vendor.contact_phone].filter(Boolean).join(' · '),
+        tagText: status.label,
+        tagType: status.type,
+        to: { path: '/suppliers/list', query: { keyword: vendor.name } },
+      }
+    }),
+  }
+}
+
+function buildTripGroup(items: RouteTrip[]): SearchOptionGroup | null {
+  if (!items.length) return null
+  return {
+    type: 'group',
+    key: 'biz:trips',
+    label: '出车趟次',
+    children: items.map((trip) => {
+      const status = ROUTE_TRIP_STATUS[trip.status]
+      return {
+        value: `trip:${trip.id}`,
+        label: trip.name || trip.trip_date,
+        title: trip.name || trip.trip_date,
+        subtitle: `${formatDate(trip.trip_date, 'YYYY-MM-DD')} · ${status.label}`,
+        tagText: trip.owner_name,
+        tagType: 'info',
+        to: `/delivery/trips/${trip.id}`,
+      }
+    }),
+  }
+}
+
+function cancelRemoteSearch() {
+  if (searchTimer) {
+    clearTimeout(searchTimer)
+    searchTimer = null
+  }
+  if (searchController) {
+    searchController.abort()
+    searchController = null
+  }
+  searchLoading.value = false
+}
+
+async function runRemoteSearch(query: string) {
+  if (searchController) searchController.abort()
+  const controller = new AbortController()
+  searchController = controller
+  searchLoading.value = true
+  const { signal } = controller
+  const [orders, customers, products, vendors, trips] = await Promise.allSettled([
+    globalSearchApi.orders(query, signal),
+    globalSearchApi.customers(query, signal),
+    globalSearchApi.products(query, signal),
+    globalSearchApi.vendors(query, signal),
+    globalSearchApi.trips(query, signal),
+  ])
+  if (signal.aborted || searchQuery.value.trim() !== query) return
+  searchController = null
+  remoteGroups.value = [
+    buildOrderGroup(settledItems(orders)),
+    buildCustomerGroup(settledItems(customers)),
+    buildProductGroup(settledItems(products)),
+    buildVendorGroup(settledItems(vendors)),
+    buildTripGroup(settledItems(trips)),
+  ].filter((group): group is SearchOptionGroup => group !== null)
+  searchLoading.value = false
+}
+
+function onSearchInput(query: string) {
+  searchQuery.value = query
+  const trimmed = query.trim()
+  remoteGroups.value = []
+  if (!trimmed) {
+    cancelRemoteSearch()
+    return
+  }
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    searchTimer = null
+    void runRemoteSearch(trimmed)
+  }, 280)
+}
+
+function resetSearch() {
+  searchValue.value = null
+  searchQuery.value = ''
+  remoteGroups.value = []
+  cancelRemoteSearch()
+}
+
+function findSearchTarget(value: string): RouteLocationRaw | null {
+  for (const group of remoteGroups.value) {
+    const hit = group.children.find((option) => option.value === value)
+    if (hit?.to) return hit.to
+  }
+  return null
+}
+
+const renderSearchLabel: SelectRenderLabel = (option) => {
+  if (option.type === 'group') {
+    return typeof option.label === 'string' ? option.label : null
+  }
+  const leaf = option as unknown as Partial<SearchLeafOption>
+  const title = String(leaf.title ?? leaf.label ?? '')
+  const tag = leaf.tagText
+    ? h(NTag, { size: 'tiny', type: leaf.tagType ?? 'default', bordered: false }, { default: () => leaf.tagText })
+    : null
+  return h('div', { style: 'display: flex; flex-direction: column; gap: 2px; width: 100%; min-width: 0; padding: 2px 0' }, [
+    h('div', { style: 'display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0' }, [
+      h('span', { style: 'font-size: 13px; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap' }, title),
+      tag,
+    ]),
+    leaf.subtitle
+      ? h('span', { style: 'font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap' }, leaf.subtitle)
+      : null,
+  ])
+}
+
+function onSearchSelect(value: string | number | null) {
+  if (value == null || value === '') {
+    resetSearch()
+    return
+  }
+  const key = String(value)
+  if (key === 'action:change-password') {
+    openPasswordModal()
+  } else if (key === 'action:toggle-theme') {
+    app.toggleTheme()
+  } else if (key.startsWith('/')) {
+    onMenuSelect(key)
+  } else {
+    const target = findSearchTarget(key)
+    if (target) router.push(target)
+  }
+  resetSearch()
+  searchSelectRef.value?.blur()
+}
+
+function onSearchShortcut(e: KeyboardEvent) {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    searchSelectRef.value?.focus()
   }
 }
 
@@ -300,13 +554,14 @@ function onTabClose(key: string) {
 
 async function onUserAction(key: string) {
   if (key === 'logout') {
-    dialog.warning({
+    confirmAction(dialog, {
       title: '退出登录', content: '确认退出当前账号？',
-      positiveText: '确认', negativeText: '取消',
-      onPositiveClick: async () => {
+      confirmText: '确认', cancelText: '取消',
+      danger: true,
+      onConfirm: async () => {
         await auth.logout()
         message.success('已退出登录')
-        router.push('/login')
+        router.replace('/login')
       },
     })
   } else if (key === 'profile') {
@@ -352,6 +607,12 @@ async function onPasswordSave() {
 
 onMounted(() => {
   if (!auth.user) auth.fetchMe()
+  window.addEventListener('keydown', onSearchShortcut)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onSearchShortcut)
+  cancelRemoteSearch()
 })
 
 watch(() => route.fullPath, () => tabStore.open(route), { immediate: true })

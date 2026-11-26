@@ -1,5 +1,5 @@
 // src/utils/dict.ts - Static dictionary / enum label helpers.
-import type { DashboardTodoCode, OrderStatus, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, PriceAdjustmentType, PriceMethod, PriceSource, VendorType, VendorStatus, RouteTripStatus, RouteStopOrigin, CallResult, OrderPriceAdjustmentStatus } from '@/types'
+import type { DashboardTodoCode, OrderStatus, OrderListItem, PaymentMethod, CustomerStatus, CustomerLevel, ProductStatus, PriceStrategyType, PriceAdjustmentType, PriceMethod, PriceSource, VendorType, VendorStatus, RouteTripStatus, RouteStopOrigin, CallResult, OrderPriceAdjustmentStatus } from '@/types'
 
 export const ORDER_STATUS: Record<OrderStatus, { label: string; type: 'primary' | 'success' | 'warning' | 'info' | 'danger' }> = {
   pending_audit: { label: '待审核', type: 'warning' },
@@ -9,6 +9,16 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; type: 'primary' 
   shipped: { label: '已发货', type: 'success' },
   completed: { label: '已完成', type: 'success' },
   cancelled: { label: '已取消', type: 'info' },
+}
+
+/** GET /orders 摘要的 status 字段（Orders.md），与旧版 ORDER_STATUS 枚举不同 */
+export const ORDER_LIST_STATUS: Record<OrderListItem['status'], { label: string; type: 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error' }> = {
+  pending_approval: { label: '待审批', type: 'warning' },
+  pending: { label: '待配送', type: 'info' },
+  delivering: { label: '配送中', type: 'primary' },
+  delivered: { label: '已送达', type: 'success' },
+  cancelled: { label: '已取消', type: 'default' },
+  rejected: { label: '已驳回', type: 'error' },
 }
 
 export const PAYMENT_METHOD: Record<PaymentMethod, string> = {
